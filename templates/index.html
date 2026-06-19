@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fischer Chess</title>
+<link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+  .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+  h1 { text-align: center; margin-bottom: 16px; color: #e94560; font-size: 1.6em; }
+  .controls { display: flex; gap: 10px; justify-content: center; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  select, button { padding: 8px 16px; border-radius: 6px; border: 1px solid #333; background: #16213e; color: #e0e0e0; font-size: 14px; cursor: pointer; }
+  button:hover { background: #e94560; }
+  button:disabled { opacity: .4; cursor: default; background: #16213e; }
+  .main { display: flex; gap: 24px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
+  #board-wrap { width: 440px; flex-shrink: 0; }
+  .info-panel { flex: 1; min-width: 240px; max-width: 360px; }
+  .card { background: #16213e; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+  .card h3 { color: #e94560; margin-bottom: 8px; font-size: .95em; text-transform: uppercase; letter-spacing: 1px; }
+  .card p { line-height: 1.6; font-size: .9em; }
+  .label { color: #888; }
+  #feedback { font-size: 1.3em; font-weight: bold; text-align: center; padding: 12px; min-height: 48px; }
+  #feedback.correct { color: #4ecca3; }
+  #feedback.wrong { color: #e94560; }
+  #feedback.info { color: #f0c040; }
+  .turn-badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: .85em; }
+  .turn-badge.white { background: #fff; color: #111; }
+  .turn-badge.black { background: #333; color: #fff; }
+  .counter { font-size: .9em; color: #888; }
+  #hint-btn { background: #0f3460; }
+  .chat-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; background: #16213e; border-radius: 10px; height: 440px; }
+  .chat-panel h3 { color: #e94560; padding: 12px 14px 8px; font-size: .95em; text-transform: uppercase; letter-spacing: 1px; }
+  .chat-messages { flex: 1; overflow-y: auto; padding: 0 14px 10px; font-size: .88em; line-height: 1.6; }
+  .chat-messages .msg { margin-bottom: 6px; }
+  .chat-messages .msg.user { color: #8bb4f0; }
+  .chat-messages .msg.sys { color: #888; }
+  .chat-messages .msg.ok { color: #4ecca3; }
+  .chat-messages .msg.err { color: #e94560; }
+  .chat-input-row { display: flex; gap: 6px; padding: 10px 14px; border-top: 1px solid #333; }
+  .chat-input-row input { flex: 1; padding: 6px 10px; border-radius: 6px; border: 1px solid #333; background: #0d1117; color: #e0e0e0; font-size: 14px; }
+  .chat-input-row button { padding: 6px 12px; border-radius: 6px; border: 1px solid #333; background: #e94560; color: #fff; font-size: 14px; cursor: pointer; }
+  #engine-btn { background: #0f3460; }
+  #engine-btn.active { background: #e94560; }
+  #engine-panel { display: none; width: 440px; background: #16213e; border-radius: 10px; padding: 12px 14px; margin-top: 8px; font-family: monospace; font-size: .85em; line-height: 1.8; }
+  #engine-panel .engine-line { color: #c0c0c0; }
+  #engine-panel .engine-line .eval { color: #4ecca3; font-weight: bold; min-width: 55px; display: inline-block; }
+  #engine-panel .engine-status { color: #888; font-size: .8em; }
+  #explore-controls { display: none; justify-content: center; gap: 8px; margin-top: 8px; width: 440px; }
+  #explore-controls button { padding: 6px 14px; font-size: 13px; }
+  /* Stats modal */
+  #stats-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.7); z-index:100; justify-content:center; align-items:center; }
+  #stats-overlay.open { display:flex; }
+  #stats-modal { background:#16213e; border-radius:12px; padding:24px; max-width:700px; width:90%; max-height:85vh; overflow-y:auto; position:relative; }
+  #stats-modal h2 { color:#e94560; margin-bottom:16px; }
+  #stats-close { position:absolute; top:12px; right:16px; background:none; border:none; color:#888; font-size:1.4em; cursor:pointer; }
+  .tactic-bar-row { display:flex; align-items:center; margin-bottom:6px; font-size:.88em; }
+  .tactic-bar-label { width:140px; text-align:right; padding-right:10px; color:#aaa; }
+  .tactic-bar { height:20px; background:#e94560; border-radius:4px; min-width:2px; transition:width .3s; }
+  .tactic-bar-count { padding-left:8px; color:#e0e0e0; font-weight:bold; }
+  .stats-summary { display:flex; gap:20px; margin-bottom:20px; flex-wrap:wrap; }
+  .stats-summary .stat-box { background:#0d1117; border-radius:8px; padding:12px 18px; text-align:center; }
+  .stats-summary .stat-val { font-size:1.6em; font-weight:bold; color:#4ecca3; }
+  .stats-summary .stat-label { font-size:.8em; color:#888; margin-top:4px; }
+  .stats-game { margin-top:16px; }
+  .stats-game h4 { color:#f0c040; margin-bottom:6px; font-size:.9em; }
+  .stats-game-puzzle { font-size:.85em; color:#bbb; margin-left:12px; margin-bottom:4px; }
+  .stats-game-puzzle .tactic-tag { display:inline-block; background:#333; color:#e94560; padding:1px 6px; border-radius:3px; font-size:.8em; margin-left:4px; }
+  #stats-player-select { margin-bottom:16px; }
+  /* Trends modal */
+  #trends-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,.7); z-index:100; justify-content:center; align-items:center; }
+  #trends-overlay.open { display:flex; }
+  #trends-modal { background:#16213e; border-radius:12px; padding:24px; max-width:800px; width:90%; max-height:85vh; overflow-y:auto; position:relative; }
+  #trends-modal h2 { color:#e94560; margin-bottom:16px; }
+  #trends-close { position:absolute; top:12px; right:16px; background:none; border:none; color:#888; font-size:1.4em; cursor:pointer; }
+  #trends-controls { display:flex; gap:10px; align-items:center; margin-bottom:16px; flex-wrap:wrap; }
+  #trends-controls select, #trends-controls input { padding:6px 10px; border-radius:6px; border:1px solid #333; background:#0d1117; color:#e0e0e0; font-size:13px; }
+  #trends-controls button { padding:6px 14px; }
+  /* Profile bar */
+  #profile-bar { display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:12px; font-size:.9em; }
+  #profile-bar .profile-name { color:#4ecca3; font-weight:bold; }
+  #profile-bar input { padding:6px 10px; border-radius:6px; border:1px solid #333; background:#16213e; color:#e0e0e0; font-size:13px; width:150px; }
+  #profile-bar button { padding:5px 12px; border-radius:6px; border:1px solid #333; background:#0f3460; color:#e0e0e0; font-size:13px; cursor:pointer; }
+  #profile-bar button:hover { background:#e94560; }
+  #profile-summary { display:none; background:#16213e; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:center; }
+  #profile-summary .ps-name { color:#4ecca3; font-size:1.1em; font-weight:bold; }
+  #profile-summary .ps-stats { color:#aaa; font-size:.85em; margin-top:6px; }
+  #profile-summary .ps-tactics { margin-top:8px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+  #profile-summary .ps-tag { background:#333; color:#e94560; padding:2px 8px; border-radius:4px; font-size:.8em; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>♟ Fischer Chess</h1>
+  <div id="user-section" style="text-align:center;margin-bottom:16px;">
+    <div id="user-logged-in" style="display:none;">
+      <span style="color:#4ecca3;font-weight:bold;font-size:1.1em;">👤 <span id="current-user-name"></span></span>
+      <a href="#" id="user-profile-link" style="margin-left:12px;color:#8bb4f0;">My Profile</a>
+      <button id="sign-off-btn" style="margin-left:12px;background:#333;padding:4px 12px;font-size:.85em;">Sign Off</button>
+    </div>
+    <div id="user-select-panel">
+      <select id="user-select" style="padding:8px 12px;min-width:180px;">
+        <option value="">— Select User —</option>
+      </select>
+      <button id="user-login-btn" style="margin-left:8px;">Go</button>
+      <button id="user-create-btn" style="margin-left:8px;background:#0f3460;">+ New User</button>
+    </div>
+  </div>
+  <div id="profile-summary"></div>
+  <div class="controls">
+    <button id="prev-btn" disabled>← Prev</button>
+    <span class="counter" id="counter">0 / 0</span>
+    <button id="next-btn" disabled>Next →</button>
+    <button id="hint-btn" disabled>Hint</button>
+    <button id="engine-btn">Engine</button>
+    <button id="stats-btn" style="background:#0f3460">Stats</button>
+    <button id="trends-btn" style="background:#0f3460">Trends</button>
+    <button id="import-chesscom-btn" style="background:#0f3460">Import from Chess.com</button>
+    <button id="import-local-btn" style="background:#0f3460">Import Local PGN</button>
+    <button id="run-analysis-btn">Run Analysis</button>
+  </div>
+  <input type="file" id="pgn-file-input" accept=".pgn" style="display:none">
+  <!-- Chess.com Import Modal -->
+  <div id="chesscom-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);z-index:200;justify-content:center;align-items:center;">
+    <div style="background:#16213e;border-radius:12px;padding:24px;width:320px;">
+      <h3 style="color:#e94560;margin-bottom:16px;">Import from Chess.com</h3>
+      <label style="display:block;margin-bottom:12px;color:#e0e0e0;">Username<br>
+        <input id="cc-username" type="text" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#0d1117;color:#e0e0e0;">
+      </label>
+      <label style="display:block;margin-bottom:12px;color:#e0e0e0;">From<br>
+        <input id="cc-from" type="date" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#0d1117;color:#e0e0e0;">
+      </label>
+      <label style="display:block;margin-bottom:16px;color:#e0e0e0;">To<br>
+        <input id="cc-to" type="date" style="width:100%;padding:8px;margin-top:4px;border-radius:6px;border:1px solid #444;background:#0d1117;color:#e0e0e0;">
+      </label>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button id="cc-cancel" style="background:#333;">Cancel</button>
+        <button id="cc-submit" style="background:#4ecca3;color:#1a1a2e;font-weight:bold;">Import</button>
+      </div>
+    </div>
+  </div>
+  <div class="main">
+    <div id="board-wrap">
+      <div id="board"></div>
+      <div id="engine-panel">
+        <div class="engine-status" id="engine-status">Engine off</div>
+        <div id="engine-lines"></div>
+      </div>
+      <div id="explore-controls">
+        <button id="back-btn">← Back</button>
+        <button id="reset-btn">Reset</button>
+        <button id="forward-btn">Forward →</button>
+      </div>
+    </div>
+    <div class="chat-panel" id="chat-panel" style="display:none">
+      <h3>Move Input</h3>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input id="chat-input" type="text" placeholder="e.g. Nf3 or g1f3" autocomplete="off">
+        <button id="chat-send">Go</button>
+      </div>
+    </div>
+    <div class="info-panel">
+      <div id="feedback" class="info">Select a PGN file to start</div>
+      <div class="card" id="game-card" style="display:none">
+        <h3>Game Info</h3>
+        <p><span class="label">Event:</span> <span id="info-event"></span></p>
+        <p><span class="label">Date:</span> <span id="info-date"></span></p>
+        <p><span class="label">White:</span> <span id="info-white"></span></p>
+        <p><span class="label">Black:</span> <span id="info-black"></span></p>
+      </div>
+      <div class="card" id="puzzle-card" style="display:none">
+        <h3>Puzzle</h3>
+        <p><span class="label">Move:</span> <span id="info-move"></span></p>
+        <p><span class="label">Turn:</span> <span id="info-turn"></span></p>
+        <p><span class="label">Reason:</span> <span id="info-reason"></span></p>
+        <p><span class="label">FEN:</span> <code id="info-fen" style="font-size:.78em;word-break:break-all;user-select:all"></code></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stats Modal -->
+<div id="stats-overlay">
+  <div id="stats-modal">
+    <button id="stats-close">&times;</button>
+    <h2>📊 Player Stats</h2>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+      <select id="stats-player-select"><option value="">— Select player —</option></select>
+      <button id="stats-save-btn" style="font-size:13px">Save to file</button>
+    </div>
+    <div id="stats-content"><p style="color:#888">Select a puzzle PGN file and click Stats to view tactic breakdown.</p></div>
+  </div>
+</div>
+
+<!-- Trends Modal -->
+<div id="trends-overlay">
+  <div id="trends-modal">
+    <button id="trends-close">&times;</button>
+    <h2>📈 Blunder Rate Trends</h2>
+    <div id="trends-controls">
+      <select id="trends-games-select">
+        <option value="">— Games PGN (or puzzle PGN) —</option>
+        {% for f in pgn_files %}
+        <option value="{{ f }}">{{ f }}</option>
+        {% endfor %}
+      </select>
+      <select id="trends-puzzles-select">
+        <option value="">— Puzzle PGN (optional, faster) —</option>
+        {% for f in pgn_files %}
+        <option value="{{ f }}">{{ f }}</option>
+        {% endfor %}
+      </select>
+      <input id="trends-player" type="text" placeholder="Player (optional)">
+      <button id="trends-load-btn">Load</button>
+    </div>
+    <canvas id="trends-chart" height="300"></canvas>
+  </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let puzzles = [], idx = 0, game = null, solved = false;
+let moveHistory = [], redoStack = [];
+
+const board = Chessboard('board', {
+  draggable: true,
+  position: 'start',
+  pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png',
+  onDrop: onDrop,
+  onSnapEnd: onSnapEnd,
+});
+
+function onDrop(src, tgt) {
+  if (solved) {
+    const move = game.move({ from: src, to: tgt, promotion: 'q' });
+    if (!move) return 'snapback';
+    moveHistory.push(move.san);
+    redoStack = [];
+    if (engineOn) startAnalysis();
+    return;
+  }
+  const move = game.move({ from: src, to: tgt, promotion: 'q' });
+  if (!move) return 'snapback';
+  const p = puzzles[idx];
+  const uci = move.from + move.to;
+  const uciQ = uci + 'q';
+  if (uci === p.solution_uci || uciQ === p.solution_uci) {
+    solved = true;
+    moveHistory = [game.history().pop() || p.solution_san]; redoStack = [];
+    document.getElementById('explore-controls').style.display = 'flex';
+    showFeedback('✓ Correct! ' + p.solution_san, 'correct');
+    showComment();
+  } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
+    solved = true;
+    moveHistory = [game.history().pop() || move.san]; redoStack = [];
+    document.getElementById('explore-controls').style.display = 'flex';
+    showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
+  } else {
+    game.undo();
+    showFeedback('✗ Try again', 'wrong');
+    return 'snapback';
+  }
+}
+
+function onSnapEnd() { board.position(game.fen()); }
+
+function showFeedback(msg, cls) {
+  const el = document.getElementById('feedback');
+  el.textContent = msg;
+  el.className = cls;
+}
+
+function showComment() {
+  const p = puzzles[idx];
+  if (p.comment) {
+    setTimeout(() => {
+      const el = document.getElementById('feedback');
+      el.textContent += '  —  ' + p.comment;
+    }, 800);
+  }
+}
+
+function chatMsg(text, cls) {
+  const el = document.getElementById('chat-messages');
+  el.innerHTML += '<div class="msg ' + cls + '">' + text + '</div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function loadPuzzle() {
+  const p = puzzles[idx];
+  game = new Chess(p.fen);
+  const orient = p.turn === 'black' ? 'black' : 'white';
+  board.orientation(orient);
+  board.position(p.fen, true);
+  solved = false;
+  moveHistory = []; redoStack = [];
+  document.getElementById('explore-controls').style.display = 'none';
+  showFeedback('Find the best move for ' + p.turn, 'info');
+  document.getElementById('counter').textContent = (idx + 1) + ' / ' + puzzles.length;
+  document.getElementById('prev-btn').disabled = idx === 0;
+  document.getElementById('next-btn').disabled = idx === puzzles.length - 1;
+  document.getElementById('hint-btn').disabled = false;
+  // Chat panel
+  document.getElementById('chat-panel').style.display = 'flex';
+  document.getElementById('chat-messages').innerHTML = '';
+  chatMsg('Find the best move for ' + p.turn, 'sys');
+  // Info panel
+  document.getElementById('game-card').style.display = '';
+  document.getElementById('puzzle-card').style.display = '';
+  document.getElementById('info-event').textContent = p.event;
+  document.getElementById('info-date').textContent = p.date;
+  document.getElementById('info-white').textContent = p.white;
+  document.getElementById('info-black').textContent = p.black;
+  document.getElementById('info-move').textContent = p.move_number;
+  document.getElementById('info-turn').innerHTML = '<span class="turn-badge ' + p.turn + '">' + p.turn + '</span>';
+  document.getElementById('info-reason').textContent = p.reason;
+  document.getElementById('info-fen').textContent = p.fen;
+}
+
+async function loadUserPuzzles() {
+  if (!activeProfile) return;
+  const r = await fetch(`/api/db/users/${activeProfile}/puzzles`);
+  const data = await r.json();
+  puzzles = data.map(p => ({
+    fen: p.fen, turn: p.turn, solution_uci: p.best_move_uci, solution_san: p.best_move_san,
+    acceptable_uci: (p.acceptable_uci||'').split(',').filter(x=>x),
+    tactics: (p.tactics||'').split(',').filter(x=>x),
+    reason: p.reason, move_number: p.move_number, comment: `Played was ${p.played_move} (${p.reason})`,
+    white: '', black: '', event: '', date: ''
+  }));
+  if (puzzles.length) { idx = 0; loadPuzzle(); }
+  else { showFeedback('No puzzles yet. Import games and run analysis.', 'info'); }
+}
+
+document.getElementById('prev-btn').addEventListener('click', () => { if (idx > 0) { idx--; loadPuzzle(); } });
+document.getElementById('next-btn').addEventListener('click', () => { if (idx < puzzles.length - 1) { idx++; loadPuzzle(); } });
+document.getElementById('hint-btn').addEventListener('click', () => {
+  if (!puzzles.length) return;
+  const p = puzzles[idx];
+  const sq = p.solution_uci.substring(0, 2);
+  $('#board .square-' + sq).css('background', 'rgba(233,69,96,0.5)');
+  setTimeout(() => $('#board .square-' + sq).css('background', ''), 1500);
+});
+
+$(window).resize(() => board.resize());
+
+function handleChatMove() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  input.value = '';
+  if (!text || !puzzles.length) return;
+  chatMsg(text, 'user');
+  if (solved) {
+    const p = puzzles[idx];
+    let move = game.move(text);
+    if (!move) {
+      const from = text.substring(0, 2), to = text.substring(2, 4), promo = text[4] || 'q';
+      move = game.move({ from, to, promotion: promo });
+    }
+    if (!move) { chatMsg('Invalid move.', 'err'); return; }
+    moveHistory.push(move.san);
+    redoStack = [];
+    board.position(game.fen());
+    chatMsg(move.san, 'sys');
+    if (engineOn) startAnalysis();
+    return;
+  }
+  const p = puzzles[idx];
+  // Try SAN first, then UCI
+  let move = game.move(text);
+  if (!move) {
+    // Try as UCI (e.g. g1f3)
+    const from = text.substring(0, 2), to = text.substring(2, 4), promo = text[4] || 'q';
+    move = game.move({ from, to, promotion: promo });
+  }
+  if (!move) {
+    chatMsg('Invalid move. Try again.', 'err');
+    return;
+  }
+  const uci = move.from + move.to;
+  const uciQ = uci + 'q';
+  if (uci === p.solution_uci || uciQ === p.solution_uci) {
+    solved = true;
+    moveHistory = [move.san]; redoStack = [];
+    document.getElementById('explore-controls').style.display = 'flex';
+    board.position(game.fen());
+    chatMsg('✓ Correct! ' + p.solution_san, 'ok');
+    showFeedback('✓ Correct! ' + p.solution_san, 'correct');
+  } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
+    solved = true;
+    moveHistory = [move.san]; redoStack = [];
+    document.getElementById('explore-controls').style.display = 'flex';
+    board.position(game.fen());
+    chatMsg('✓ Acceptable! Best was ' + p.solution_san, 'ok');
+    showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
+  } else {
+    game.undo();
+    chatMsg('Incorrect, try again.', 'err');
+  }
+}
+
+document.getElementById('chat-send').addEventListener('click', handleChatMove);
+document.getElementById('chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') handleChatMove(); });
+
+// --- Explore Controls (Back / Forward / Reset) ---
+function updateBoard() {
+  board.position(game.fen());
+  if (engineOn) startAnalysis();
+}
+document.getElementById('back-btn').addEventListener('click', () => {
+  if (!solved || game.history().length === 0) return;
+  const move = game.undo();
+  if (move) { redoStack.push(moveHistory.pop()); updateBoard(); }
+});
+document.getElementById('forward-btn').addEventListener('click', () => {
+  if (!solved || !redoStack.length) return;
+  const san = redoStack.pop();
+  const move = game.move(san);
+  if (move) { moveHistory.push(san); updateBoard(); }
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  if (!solved || !puzzles.length) return;
+  const p = puzzles[idx];
+  game = new Chess(p.fen);
+  moveHistory = []; redoStack = [];
+  updateBoard();
+});
+document.addEventListener('keydown', (e) => {
+  if (!solved || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'ArrowLeft') { e.preventDefault(); document.getElementById('back-btn').click(); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); document.getElementById('forward-btn').click(); }
+});
+
+// --- Engine Analysis (Stockfish WASM) ---
+let engineOn = false, sf = null, engineReady = false, analysisId = 0;
+
+function initEngine() {
+  if (sf) return Promise.resolve();
+  return fetch('https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js')
+    .then(r => r.blob())
+    .then(blob => new Promise((resolve, reject) => {
+      sf = new Worker(URL.createObjectURL(blob));
+      sf.onerror = function(e) { console.error('Stockfish worker error', e); reject(e); };
+      sf.onmessage = function(e) {
+        const line = typeof e.data === 'string' ? e.data : '';
+        if (line === 'uciok') { sf.postMessage('isready'); }
+        if (line === 'readyok') { engineReady = true; resolve(); }
+        if (line.startsWith('info depth') && line.includes(' pv ')) {
+          handleEngineInfo(line);
+        }
+      };
+      sf.postMessage('uci');
+    }));
+}
+
+function handleEngineInfo(line) {
+  const depthM = line.match(/depth (\d+)/);
+  const pvIdx = line.match(/multipv (\d+)/);
+  const cpM = line.match(/ cp (-?\d+)/);
+  const mateM = line.match(/ mate (-?\d+)/);
+  const pvMoves = line.match(/ pv (.+)/);
+  if (!pvMoves) return;
+  const depth = depthM ? depthM[1] : '?';
+  const pvNum = pvIdx ? parseInt(pvIdx[1]) : 1;
+  let evalStr;
+  if (mateM) {
+    evalStr = 'M' + mateM[1];
+  } else if (cpM) {
+    const cp = parseInt(cpM[1]);
+    const blackToMove = game && game.fen().includes(' b ');
+    const adj = blackToMove ? -cp : cp;
+    evalStr = (adj >= 0 ? '+' : '') + (adj / 100).toFixed(1);
+  } else { evalStr = '?'; }
+  const uciMoves = pvMoves[1].trim().split(/\s+/).slice(0, 8);
+  let sanLine = '';
+  if (game) {
+    const tmp = new Chess(game.fen());
+    for (const uci of uciMoves) {
+      const from = uci.substring(0, 2), to = uci.substring(2, 4), promo = uci[4];
+      const m = tmp.move({ from, to, promotion: promo || undefined });
+      if (!m) break;
+      sanLine += (sanLine ? ' ' : '') + m.san;
+    }
+  }
+  if (!sanLine) sanLine = pvMoves[1].trim();
+  const container = document.getElementById('engine-lines');
+  let el = document.getElementById('engine-pv-' + pvNum);
+  if (!el) { el = document.createElement('div'); el.className = 'engine-line'; el.id = 'engine-pv-' + pvNum; container.appendChild(el); }
+  el.innerHTML = '<span class="eval">' + evalStr + '</span> ' + sanLine;
+  document.getElementById('engine-status').textContent = 'Depth ' + depth;
+}
+
+function startAnalysis() {
+  if (!sf || !engineReady || !game) return;
+  analysisId++;
+  document.getElementById('engine-lines').innerHTML = '';
+  document.getElementById('engine-status').textContent = 'Thinking...';
+  sf.postMessage('stop');
+  sf.postMessage('ucinewgame');
+  sf.postMessage('isready');
+  sf.postMessage('setoption name MultiPV value 3');
+  sf.postMessage('position fen ' + game.fen());
+  sf.postMessage('go depth 22');
+}
+
+function stopAnalysis() {
+  if (sf) sf.postMessage('stop');
+  document.getElementById('engine-lines').innerHTML = '';
+  document.getElementById('engine-status').textContent = 'Engine off';
+}
+
+document.getElementById('engine-btn').addEventListener('click', async () => {
+  engineOn = !engineOn;
+  document.getElementById('engine-btn').classList.toggle('active', engineOn);
+  if (engineOn) {
+    document.getElementById('engine-panel').style.display = 'block';
+    document.getElementById('engine-status').textContent = 'Loading engine...';
+    try {
+      await initEngine();
+      if (game) startAnalysis();
+    } catch(e) {
+      document.getElementById('engine-status').textContent = 'Engine failed to load: ' + e.message;
+      engineOn = false;
+      document.getElementById('engine-btn').classList.remove('active');
+    }
+  } else {
+    document.getElementById('engine-panel').style.display = 'none';
+    stopAnalysis();
+  }
+});
+
+// Auto-update engine on position changes
+const _origOnSnapEnd = onSnapEnd;
+onSnapEnd = function() { _origOnSnapEnd(); if (engineOn) startAnalysis(); };
+const _origLoadPuzzle = loadPuzzle;
+loadPuzzle = function() { _origLoadPuzzle(); if (engineOn) startAnalysis(); };
+
+// --- Stats Panel ---
+document.getElementById('stats-btn').addEventListener('click', () => {
+  const file = document.getElementById('pgn-select').value;
+  if (!file) { showFeedback('Select a PGN file first', 'wrong'); return; }
+  document.getElementById('stats-overlay').classList.add('open');
+  document.getElementById('stats-content').innerHTML = '<p style="color:#888">Loading stats...</p>';
+  fetch('/api/stats/live?file=' + encodeURIComponent(file))
+    .then(r => r.json())
+    .then(data => {
+      const sel = document.getElementById('stats-player-select');
+      sel.innerHTML = '<option value="">— All players —</option>';
+      const players = Object.keys(data);
+      players.forEach(p => sel.add(new Option(p, p)));
+      window._statsData = data;
+      window._statsPgnFile = file;
+      renderStats(data, null);
+    });
+});
+
+document.getElementById('stats-player-select').addEventListener('change', function() {
+  if (!window._statsData) return;
+  renderStats(window._statsData, this.value || null);
+});
+
+document.getElementById('stats-close').addEventListener('click', () => {
+  document.getElementById('stats-overlay').classList.remove('open');
+});
+document.getElementById('stats-overlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('stats-overlay'))
+    document.getElementById('stats-overlay').classList.remove('open');
+});
+
+document.getElementById('stats-save-btn').addEventListener('click', () => {
+  const file = window._statsPgnFile;
+  const player = document.getElementById('stats-player-select').value;
+  if (!file) return;
+  fetch('/api/stats/generate', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({file, player})
+  }).then(r => r.json()).then(data => {
+    const names = data.map(d => d.player).join(', ');
+    alert('Stats saved for: ' + names);
+  });
+});
+
+function renderStats(allStats, playerFilter) {
+  const container = document.getElementById('stats-content');
+  let stats;
+  if (playerFilter && allStats[playerFilter]) {
+    stats = allStats[playerFilter];
+  } else {
+    // Merge all players
+    let total = 0, allTactics = {}, allDrops = [];
+    Object.values(allStats).forEach(s => {
+      total += s.total_blunders;
+      Object.entries(s.tactic_breakdown).forEach(([t,c]) => allTactics[t] = (allTactics[t]||0) + c);
+      if (s.avg_cp_loss) allDrops.push(s.avg_cp_loss);
+    });
+    stats = {
+      total_blunders: total,
+      avg_cp_loss: allDrops.length ? Math.round(allDrops.reduce((a,b)=>a+b,0)/allDrops.length) : 0,
+      tactic_breakdown: allTactics,
+      by_game: Object.assign({}, ...Object.values(allStats).map(s => s.by_game)),
+    };
+  }
+  if (!stats || !stats.total_blunders) {
+    container.innerHTML = '<p style="color:#888">No blunders found for this selection.</p>';
+    return;
+  }
+  const maxCount = Math.max(...Object.values(stats.tactic_breakdown));
+  let html = '<div class="stats-summary">';
+  html += '<div class="stat-box"><div class="stat-val">' + stats.total_blunders + '</div><div class="stat-label">Total Blunders</div></div>';
+  html += '<div class="stat-box"><div class="stat-val">−' + stats.avg_cp_loss + 'cp</div><div class="stat-label">Avg Loss</div></div>';
+  html += '<div class="stat-box"><div class="stat-val">' + Object.keys(stats.tactic_breakdown).length + '</div><div class="stat-label">Tactic Types</div></div>';
+  html += '</div>';
+  html += '<h3 style="color:#e94560;margin-bottom:10px">Tactic Breakdown</h3>';
+  const sorted = Object.entries(stats.tactic_breakdown).sort((a,b) => b[1]-a[1]);
+  sorted.forEach(([tactic, count]) => {
+    const pct = Math.round(count / maxCount * 100);
+    html += '<div class="tactic-bar-row"><span class="tactic-bar-label">' + tactic + '</span>';
+    html += '<div class="tactic-bar" style="width:' + pct + '%"></div>';
+    html += '<span class="tactic-bar-count">' + count + '</span></div>';
+  });
+  if (stats.by_game) {
+    html += '<h3 style="color:#e94560;margin:16px 0 10px">By Game</h3>';
+    Object.entries(stats.by_game).forEach(([game, puzzles]) => {
+      html += '<div class="stats-game"><h4>' + game + ' (' + puzzles.length + ' blunders)</h4>';
+      puzzles.forEach(p => {
+        const tags = (p.tactics||[]).map(t => '<span class="tactic-tag">' + t + '</span>').join('');
+        html += '<div class="stats-game-puzzle">Move ' + p.move + ': ' + p.reason + ' — best was <b>' + p.best_move + '</b> ' + tags + '</div>';
+      });
+      html += '</div>';
+    });
+  }
+  container.innerHTML = html;
+}
+
+// --- User Section ---
+let activeProfile = null;
+
+function loadUsers() {
+  fetch('/api/db/users').then(r=>r.json()).then(users => {
+    const sel = document.getElementById('user-select');
+    sel.innerHTML = '<option value="">— Select User —</option>';
+    users.forEach(u => sel.add(new Option(u.username, u.username)));
+    // Restore from localStorage
+    const saved = localStorage.getItem('fischer_user');
+    if (saved && users.find(u => u.username === saved)) {
+      loginUser(saved);
+    }
+  });
+}
+
+function loginUser(username) {
+  activeProfile = username;
+  localStorage.setItem('fischer_user', username);
+  document.getElementById('user-select-panel').style.display = 'none';
+  document.getElementById('user-logged-in').style.display = '';
+  document.getElementById('current-user-name').textContent = username;
+  document.getElementById('user-profile-link').href = '/player/' + username;
+  loadUserPuzzles();
+}
+
+function signOff() {
+  activeProfile = null;
+  localStorage.removeItem('fischer_user');
+  document.getElementById('user-logged-in').style.display = 'none';
+  document.getElementById('user-select-panel').style.display = '';
+}
+
+document.getElementById('user-login-btn').addEventListener('click', () => {
+  const val = document.getElementById('user-select').value;
+  if (val) loginUser(val);
+});
+
+document.getElementById('sign-off-btn').addEventListener('click', signOff);
+
+document.getElementById('user-create-btn').addEventListener('click', () => {
+  const name = prompt('Username:');
+  if (!name) return;
+  const cc = prompt('Chess.com username (optional):');
+  fetch('/api/db/users', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({username:name, chess_com_username:cc||''})
+  }).then(r=>r.json()).then(d => {
+    if (d.error) alert(d.error);
+    else { loadUsers(); loginUser(d.username); }
+  });
+});
+
+loadUsers();
+
+// --- Trends Chart ---
+let trendsChart = null;
+
+document.getElementById('trends-btn').addEventListener('click', () => {
+  document.getElementById('trends-overlay').classList.add('open');
+});
+
+document.getElementById('import-chesscom-btn').addEventListener('click', () => {
+  if (!activeProfile) { alert('Please select a user first.'); return; }
+  document.getElementById('cc-username').value = '';
+  document.getElementById('cc-from').value = '';
+  document.getElementById('cc-to').value = '';
+  document.getElementById('chesscom-modal').style.display = 'flex';
+});
+document.getElementById('cc-cancel').addEventListener('click', () => {
+  document.getElementById('chesscom-modal').style.display = 'none';
+});
+document.getElementById('cc-submit').addEventListener('click', async () => {
+  const chessUser = document.getElementById('cc-username').value.trim();
+  const fromDate = document.getElementById('cc-from').value;
+  const toDate = document.getElementById('cc-to').value;
+  document.getElementById('chesscom-modal').style.display = 'none';
+  document.getElementById('import-chesscom-btn').disabled = true;
+  document.getElementById('import-chesscom-btn').textContent = 'Importing...';
+  const body = {};
+  if (chessUser) body.chess_com_username = chessUser;
+  if (fromDate) body.from_date = fromDate;
+  if (toDate) body.to_date = toDate;
+  const r = await fetch(`/api/db/users/${activeProfile}/import`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await r.json();
+  document.getElementById('import-chesscom-btn').disabled = false;
+  document.getElementById('import-chesscom-btn').textContent = 'Import from Chess.com';
+  alert(d.error || `Imported ${d.imported} games.`);
+});
+
+document.getElementById('import-local-btn').addEventListener('click', () => {
+  if (!activeProfile) { alert('Please select a user first.'); return; }
+  document.getElementById('pgn-file-input').click();
+});
+
+document.getElementById('pgn-file-input').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  const r = await fetch(`/api/db/users/${activeProfile}/import-pgn`, {method:'POST', body: formData});
+  const d = await r.json();
+  alert(d.error || `Imported ${d.imported} games from ${file.name}.`);
+  e.target.value = '';
+});
+
+document.getElementById('run-analysis-btn').addEventListener('click', async () => {
+  if (!activeProfile) { alert('Please select a user first.'); return; }
+  const playerName = prompt('Player name as it appears in PGN headers (leave blank to keep all blunders):','');
+  if (playerName === null) return;
+  document.getElementById('run-analysis-btn').disabled = true;
+  document.getElementById('run-analysis-btn').textContent = 'Analyzing...';
+  const r = await fetch(`/api/db/users/${activeProfile}/generate-puzzles`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({limit:50, depth:12, player_name: playerName})
+  });
+  const d = await r.json();
+  document.getElementById('run-analysis-btn').disabled = false;
+  document.getElementById('run-analysis-btn').textContent = 'Run Analysis';
+  alert(d.error || `Generated ${d.puzzles_generated} puzzles from ${d.games_analyzed} games.`);
+  if (!d.error) loadUserPuzzles();
+});
+
+document.getElementById('trends-close').addEventListener('click', () => {
+  document.getElementById('trends-overlay').classList.remove('open');
+});
+document.getElementById('trends-overlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('trends-overlay'))
+    document.getElementById('trends-overlay').classList.remove('open');
+});
+
+document.getElementById('trends-load-btn').addEventListener('click', () => {
+  const games = document.getElementById('trends-games-select').value;
+  const puzzles = document.getElementById('trends-puzzles-select').value;
+  const player = document.getElementById('trends-player').value.trim();
+  if (!games && !puzzles) { alert('Select at least one PGN file'); return; }
+  const params = new URLSearchParams();
+  if (games) params.set('games', games);
+  if (puzzles) params.set('puzzles', puzzles);
+  if (player) params.set('player', player);
+  fetch('/api/trends?' + params)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+      renderTrends(data);
+    });
+});
+
+function renderTrends(data) {
+  const ctx = document.getElementById('trends-chart').getContext('2d');
+  if (trendsChart) trendsChart.destroy();
+  const labels = data.map(d => d.date.replace(/\./g, '-'));
+  const rates = data.map(d => (d.blunder_rate * 100).toFixed(2));
+  // 5-game moving average
+  const window = Math.min(5, Math.ceil(rates.length / 3));
+  const ma = rates.map((_, i) => {
+    const start = Math.max(0, i - window + 1);
+    const slice = rates.slice(start, i + 1);
+    return (slice.reduce((a, b) => a + parseFloat(b), 0) / slice.length).toFixed(2);
+  });
+  trendsChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Blunder Rate (%)',
+        data: rates,
+        borderColor: '#e94560',
+        backgroundColor: 'rgba(233,69,96,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 5,
+        pointHoverRadius: 8,
+      }, {
+        label: window + '-game Moving Avg',
+        data: ma,
+        borderColor: '#4ecca3',
+        borderWidth: 2,
+        borderDash: [6, 3],
+        pointRadius: 0,
+        tension: 0.4,
+        fill: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            afterLabel: (ctx) => {
+              const d = data[ctx.dataIndex];
+              return d.game + '\n' + d.blunders + ' blunders / ' + d.total_moves + ' moves';
+            }
+          }
+        },
+        legend: { labels: { color: '#e0e0e0' } }
+      },
+      scales: {
+        x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+        y: { ticks: { color: '#888', callback: v => v + '%' }, grid: { color: '#333' }, beginAtZero: true }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>

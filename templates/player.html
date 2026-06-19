@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ username }} — Fischer Chess</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; padding: 24px; }
+  .container { max-width: 1000px; margin: 0 auto; }
+  h1 { color: #e94560; margin-bottom: 8px; }
+  h2 { color: #e94560; font-size: 1.1em; margin: 24px 0 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .subtitle { color: #888; margin-bottom: 24px; }
+  a { color: #4ecca3; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .stats-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .stat-box { background: #16213e; border-radius: 10px; padding: 16px 24px; text-align: center; min-width: 140px; }
+  .stat-val { font-size: 1.8em; font-weight: bold; color: #4ecca3; }
+  .stat-label { font-size: .8em; color: #888; margin-top: 4px; }
+  .tactic-row { display: flex; align-items: center; margin-bottom: 5px; font-size: .88em; }
+  .tactic-label { width: 150px; text-align: right; padding-right: 10px; color: #aaa; }
+  .tactic-bar { height: 18px; background: #e94560; border-radius: 4px; min-width: 2px; }
+  .tactic-count { padding-left: 8px; color: #e0e0e0; font-weight: bold; }
+  .chart-wrap { background: #16213e; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+  table { width: 100%; border-collapse: collapse; font-size: .88em; }
+  th { text-align: left; color: #888; padding: 8px; border-bottom: 1px solid #333; }
+  td { padding: 8px; border-bottom: 1px solid #222; }
+  .tag { display: inline-block; background: #333; color: #e94560; padding: 1px 6px; border-radius: 3px; font-size: .8em; margin-right: 3px; }
+  .actions { margin-bottom: 24px; display: flex; gap: 10px; flex-wrap: wrap; }
+  button { padding: 8px 16px; border-radius: 6px; border: 1px solid #333; background: #16213e; color: #e0e0e0; font-size: 14px; cursor: pointer; }
+  button:hover { background: #e94560; }
+  button:disabled { opacity: .4; cursor: default; background: #16213e; }
+  #status { color: #888; font-size: .85em; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>♟ {{ username }}</h1>
+  <p class="subtitle"><a href="/">← Back to puzzles</a> | <a href="#" id="switch-user-link">Switch User</a></p>
+
+  <div class="actions">
+    <button id="delete-btn" style="background:#2a1a1a;border-color:#e94560">Delete User</button>
+  </div>
+  <div id="status"></div>
+
+  <h2>Stats</h2>
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-box"><div class="stat-val" id="s-puzzles">—</div><div class="stat-label">Puzzles</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-avg">—</div><div class="stat-label">Avg CP Loss</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-games">—</div><div class="stat-label">Games</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-blunder-games">—</div><div class="stat-label">Games w/ Blunders</div></div>
+  </div>
+  <div id="tactics-chart"></div>
+
+  <h2>Blunder Rate Trend</h2>
+  <div style="margin-bottom:10px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <label style="color:#e0e0e0;">X-axis:
+      <select id="x-axis-select" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #444;padding:4px 8px;border-radius:4px;">
+        <option value="date">Game Date</option>
+        <option value="game_number">Game # (sequential)</option>
+      </select>
+    </label>
+    <label style="color:#e0e0e0;">Y-axis:
+      <select id="y-axis-select" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #444;padding:4px 8px;border-radius:4px;">
+        <option value="blunder_rate">Blunder Rate (%)</option>
+        <option value="blunders">Blunder Count</option>
+        <option value="avg_cp_loss">Avg Centipawn Loss</option>
+        <option value="total_moves">Total Moves</option>
+      </select>
+    </label>
+    <label style="color:#e0e0e0;">From:
+      <input type="date" id="date-from" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #444;padding:4px 8px;border-radius:4px;">
+    </label>
+    <label style="color:#e0e0e0;">To:
+      <input type="date" id="date-to" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #444;padding:4px 8px;border-radius:4px;">
+    </label>
+    <button id="apply-range-btn" style="background:#4ecca3;color:#1a1a2e;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:bold;">Apply</button>
+  </div>
+  <div class="chart-wrap"><canvas id="trend-chart" height="200"></canvas></div>
+
+  <h2>Recent Puzzles</h2>
+  <table id="puzzles-table">
+    <thead><tr><th>Move</th><th>Turn</th><th>Reason</th><th>Best Move</th><th>Tactics</th></tr></thead>
+    <tbody id="puzzles-body"></tbody>
+  </table>
+
+  <h2 style="margin-top:32px">Recent Games</h2>
+  <table id="games-table">
+    <thead><tr><th>Date</th><th>White</th><th>Black</th><th>Result</th><th>Moves</th><th></th></tr></thead>
+    <tbody id="games-body"></tbody>
+  </table>
+</div>
+
+<script>
+const USER = "{{ username }}";
+
+async function loadAll() {
+  const [stats, trends, puzzles, games] = await Promise.all([
+    fetch(`/api/db/users/${USER}/stats`).then(r=>r.json()),
+    fetch(`/api/db/users/${USER}/trends`).then(r=>r.json()),
+    fetch(`/api/db/users/${USER}/puzzles?limit=20`).then(r=>r.json()),
+    fetch(`/api/db/users/${USER}/games?limit=20`).then(r=>r.json()),
+  ]);
+  renderStats(stats);
+  renderTrends(trends);
+  renderPuzzles(puzzles);
+  renderGames(games);
+}
+
+function renderStats(s) {
+  document.getElementById('s-puzzles').textContent = s.total_puzzles || 0;
+  document.getElementById('s-avg').textContent = s.avg_drop ? `−${s.avg_drop}` : '—';
+  document.getElementById('s-blunder-games').textContent = s.games_with_blunders || 0;
+  // Total games from games endpoint
+  fetch(`/api/db/users/${USER}/games`).then(r=>r.json()).then(g => {
+    document.getElementById('s-games').textContent = g.length;
+  });
+  // Tactic bars
+  const tb = s.tactic_breakdown || {};
+  const max = Math.max(...Object.values(tb), 1);
+  let html = '';
+  Object.entries(tb).sort((a,b)=>b[1]-a[1]).forEach(([t,c]) => {
+    const pct = Math.round(c/max*100);
+    html += `<div class="tactic-row"><span class="tactic-label">${t}</span><div class="tactic-bar" style="width:${pct}%"></div><span class="tactic-count">${c}</span></div>`;
+  });
+  document.getElementById('tactics-chart').innerHTML = html;
+}
+
+let trendChart = null;
+let trendData = [];
+
+function renderTrends(data) {
+  trendData = data.filter(d => d.total_moves > 0);
+  if (!trendData.length) {
+    document.getElementById('trend-chart').parentElement.innerHTML = '<p style="color:#888;text-align:center;padding:40px 0;">No trend data yet. Click "Run Analysis" to analyze games first.</p>';
+    return;
+  }
+  updateTrendChart();
+}
+
+function updateTrendChart() {
+  const xAxis = document.getElementById('x-axis-select').value;
+  const yAxis = document.getElementById('y-axis-select').value;
+  const fromDate = document.getElementById('date-from').value;
+  const toDate = document.getElementById('date-to').value;
+
+  let filtered = trendData;
+  if (fromDate || toDate) {
+    filtered = trendData.filter(d => {
+      const gd = d.date.replace(/\./g, '-');
+      if (fromDate && gd < fromDate) return false;
+      if (toDate && gd > toDate) return false;
+      return true;
+    });
+  }
+  if (!filtered.length) { if(trendChart){trendChart.destroy();trendChart=null;} return; }
+
+  const useTime = (xAxis === 'date');
+  const labels = filtered.map((d, i) => useTime ? d.date.replace(/\./g,'-') : (i+1));
+
+  const yConfig = {
+    blunder_rate: { getData: d => (d.blunder_rate*100).toFixed(2), label: 'Blunder Rate (%)', suffix: '%' },
+    blunders: { getData: d => d.blunders, label: 'Blunder Count', suffix: '' },
+    avg_cp_loss: { getData: d => d.avg_cp_loss || 0, label: 'Avg CP Loss', suffix: ' cp' },
+    total_moves: { getData: d => d.total_moves, label: 'Total Moves', suffix: '' },
+  };
+  const yConf = yConfig[yAxis];
+  const values = filtered.map(d => yConf.getData(d));
+
+  const w = Math.min(5, Math.ceil(values.length/3));
+  const ma = values.map((_,i) => {
+    const sl = values.slice(Math.max(0,i-w+1), i+1);
+    return (sl.reduce((a,b)=>a+parseFloat(b),0)/sl.length).toFixed(2);
+  });
+
+  const xScale = useTime ? {
+    type: 'category',
+    title: { display:true, text:'Date', color:'#aaa' },
+    ticks: { color:'#888' }, grid: { color:'#333' }
+  } : {
+    type: 'category',
+    title: { display:true, text:'Game #', color:'#aaa' },
+    ticks: { color:'#888' }, grid: { color:'#333' }
+  };
+
+  const ctx = document.getElementById('trend-chart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type:'line',
+    data: { labels, datasets: [
+      { label: yConf.label, data:values, borderColor:'#e94560', backgroundColor:'rgba(233,69,96,0.1)', fill:true, tension:.3, pointRadius:3 },
+      { label:w+'-game MA', data:ma, borderColor:'#4ecca3', borderWidth:2, borderDash:[6,3], pointRadius:0, tension:.4, fill:false }
+    ]},
+    options: { responsive:true, plugins:{ legend:{labels:{color:'#e0e0e0'}} }, scales:{ x: xScale, y:{title:{display:true,text:yConf.label,color:'#aaa'},ticks:{color:'#888',callback:v=>v+yConf.suffix},grid:{color:'#333'},beginAtZero:true} } }
+  });
+}
+
+document.getElementById('x-axis-select').addEventListener('change', updateTrendChart);
+document.getElementById('y-axis-select').addEventListener('change', updateTrendChart);
+document.getElementById('apply-range-btn').addEventListener('click', updateTrendChart);
+
+function renderPuzzles(puzzles) {
+  const tbody = document.getElementById('puzzles-body');
+  tbody.innerHTML = puzzles.map(p => `<tr>
+    <td>${p.move_number}</td><td>${p.turn}</td><td>${p.reason}</td>
+    <td>${p.best_move_san}</td>
+    <td>${(p.tactics||'').split(',').map(t=>`<span class="tag">${t}</span>`).join('')}</td>
+  </tr>`).join('');
+}
+
+function renderGames(games) {
+  const tbody = document.getElementById('games-body');
+  tbody.innerHTML = games.map(g => `<tr>
+    <td>${g.date}</td><td>${g.white}</td><td>${g.black}</td><td>${g.result}</td><td>${g.total_moves}</td>
+    <td><button onclick="deleteGame(${g.id})" style="background:none;border:none;color:#e94560;cursor:pointer;font-size:1.1em;">✕</button></td>
+  </tr>`).join('');
+}
+
+async function deleteGame(gameId) {
+  if (!confirm('Delete this game and its puzzles?')) return;
+  await fetch(`/api/db/users/${USER}/games/${gameId}`, {method:'DELETE'});
+  loadAll();
+}
+
+// Actions
+document.getElementById('switch-user-link').addEventListener('click', (e) => {
+  e.preventDefault();
+  window.location.href = '/';
+});
+
+document.getElementById('delete-btn').addEventListener('click', async () => {
+  if (!confirm(`Delete user "${USER}" and all their games/puzzles?`)) return;
+  await fetch(`/api/db/users/${USER}`, {method:'DELETE'});
+  window.location.href = '/';
+});
+
+loadAll();
+</script>
+</body>
+</html>

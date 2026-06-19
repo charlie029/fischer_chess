@@ -1,0 +1,19 @@
+# Database
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.import_state.json
+
+# Stockfish binary
+stockfish/
+
+# macOS
+.DS_Store
+
+# PGN files (user data)
+*.pgn
+
+# Player stats (generated)
+player_stats/
