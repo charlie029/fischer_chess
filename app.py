@@ -493,6 +493,25 @@ def api_db_user_puzzles(username):
     return jsonify(puzzles)
 
 
+@app.route("/api/db/users/<username>/puzzle-queue", methods=["GET"])
+def api_db_puzzle_queue(username):
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    puzzles = [dict(p) for p in db.get_queue_puzzles(user["id"])]
+    return jsonify(puzzles)
+
+
+@app.route("/api/db/puzzles/<int:puzzle_id>/status", methods=["PUT"])
+def api_db_update_puzzle_status(puzzle_id):
+    data = request.get_json() or {}
+    status = data.get("status")
+    if status not in ("active", "solved_first_try", "solved_retry", "archived"):
+        return jsonify({"error": "Invalid status"}), 400
+    db.update_puzzle_status(puzzle_id, status)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/db/users/<username>/generate-puzzles", methods=["POST"])
 def api_db_generate_puzzles(username):
     """Generate puzzles from user's games in DB and save them."""

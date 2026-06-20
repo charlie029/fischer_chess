@@ -113,6 +113,7 @@
     <span class="counter" id="counter">0 / 0</span>
     <button id="next-btn" disabled>Next →</button>
     <button id="hint-btn" disabled>Hint</button>
+    <button id="archive-btn" style="background:#2a1a1a;border-color:#e94560">Skip</button>
     <button id="engine-btn">Engine</button>
     <button id="stats-btn" style="background:#0f3460">Stats</button>
     <button id="trends-btn" style="background:#0f3460">Trends</button>
@@ -174,7 +175,6 @@
         <h3>Puzzle</h3>
         <p><span class="label">Move:</span> <span id="info-move"></span></p>
         <p><span class="label">Turn:</span> <span id="info-turn"></span></p>
-        <p><span class="label">Reason:</span> <span id="info-reason"></span></p>
         <p><span class="label">FEN:</span> <code id="info-fen" style="font-size:.78em;word-break:break-all;user-select:all"></code></p>
       </div>
     </div>
@@ -254,13 +254,24 @@ function onDrop(src, tgt) {
     moveHistory = [game.history().pop() || p.solution_san]; redoStack = [];
     document.getElementById('explore-controls').style.display = 'flex';
     showFeedback('✓ Correct! ' + p.solution_san, 'correct');
-    showComment();
+    if (attempts === 0) {
+      setPuzzleStatus(p.id, 'solved_first_try');
+      showFeedback('✓ Correct! (archived)', 'correct');
+    } else {
+      setPuzzleStatus(p.id, 'solved_retry');
+    }
   } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
     solved = true;
     moveHistory = [game.history().pop() || move.san]; redoStack = [];
     document.getElementById('explore-controls').style.display = 'flex';
     showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
+    if (attempts === 0) {
+      setPuzzleStatus(p.id, 'solved_first_try');
+    } else {
+      setPuzzleStatus(p.id, 'solved_retry');
+    }
   } else {
+    attempts++;
     game.undo();
     showFeedback('✗ Try again', 'wrong');
     return 'snapback';
@@ -298,6 +309,7 @@ function loadPuzzle() {
   board.orientation(orient);
   board.position(p.fen, true);
   solved = false;
+  attempts = 0;
   moveHistory = []; redoStack = [];
   document.getElementById('explore-controls').style.display = 'none';
   showFeedback('Find the best move for ' + p.turn, 'info');
@@ -318,23 +330,42 @@ function loadPuzzle() {
   document.getElementById('info-black').textContent = p.black;
   document.getElementById('info-move').textContent = p.move_number;
   document.getElementById('info-turn').innerHTML = '<span class="turn-badge ' + p.turn + '">' + p.turn + '</span>';
-  document.getElementById('info-reason').textContent = p.reason;
   document.getElementById('info-fen').textContent = p.fen;
 }
 
+let attempts = 0;
+
 async function loadUserPuzzles() {
   if (!activeProfile) return;
-  const r = await fetch(`/api/db/users/${activeProfile}/puzzles`);
+  const r = await fetch(`/api/db/users/${activeProfile}/puzzle-queue`);
   const data = await r.json();
   puzzles = data.map(p => ({
-    fen: p.fen, turn: p.turn, solution_uci: p.best_move_uci, solution_san: p.best_move_san,
+    id: p.id, fen: p.fen, turn: p.turn, solution_uci: p.best_move_uci, solution_san: p.best_move_san,
     acceptable_uci: (p.acceptable_uci||'').split(',').filter(x=>x),
     tactics: (p.tactics||'').split(',').filter(x=>x),
-    reason: p.reason, move_number: p.move_number, comment: `Played was ${p.played_move} (${p.reason})`,
+    move_number: p.move_number, status: p.status,
     white: '', black: '', event: '', date: ''
   }));
-  if (puzzles.length) { idx = 0; loadPuzzle(); }
-  else { showFeedback('No puzzles yet. Import games and run analysis.', 'info'); }
+  if (puzzles.length) { idx = 0; attempts = 0; loadPuzzle(); }
+  else { showFeedback('No puzzles in queue. Import games and run analysis.', 'info'); }
+}
+
+async function setPuzzleStatus(puzzleId, status) {
+  await fetch(`/api/db/puzzles/${puzzleId}/status`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status})
+  });
+}
+
+async function archivePuzzle() {
+  if (!puzzles.length) return;
+  const p = puzzles[idx];
+  await setPuzzleStatus(p.id, 'archived');
+  puzzles.splice(idx, 1);
+  if (!puzzles.length) { showFeedback('Queue empty!', 'info'); return; }
+  if (idx >= puzzles.length) idx = puzzles.length - 1;
+  attempts = 0;
+  loadPuzzle();
 }
 
 document.getElementById('prev-btn').addEventListener('click', () => { if (idx > 0) { idx--; loadPuzzle(); } });
@@ -346,6 +377,8 @@ document.getElementById('hint-btn').addEventListener('click', () => {
   $('#board .square-' + sq).css('background', 'rgba(233,69,96,0.5)');
   setTimeout(() => $('#board .square-' + sq).css('background', ''), 1500);
 });
+
+document.getElementById('archive-btn').addEventListener('click', archivePuzzle);
 
 $(window).resize(() => board.resize());
 
@@ -391,6 +424,7 @@ function handleChatMove() {
     board.position(game.fen());
     chatMsg('✓ Correct! ' + p.solution_san, 'ok');
     showFeedback('✓ Correct! ' + p.solution_san, 'correct');
+    setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
   } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
     solved = true;
     moveHistory = [move.san]; redoStack = [];
@@ -398,7 +432,9 @@ function handleChatMove() {
     board.position(game.fen());
     chatMsg('✓ Acceptable! Best was ' + p.solution_san, 'ok');
     showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
+    setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
   } else {
+    attempts++;
     game.undo();
     chatMsg('Incorrect, try again.', 'err');
   }

@@ -17,3 +17,4 @@ stockfish/
 
 # Player stats (generated)
 player_stats/
+*.csv

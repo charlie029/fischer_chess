@@ -52,6 +52,7 @@ def init_db():
             turn TEXT,
             tactics TEXT,
             acceptable_uci TEXT,
+            status TEXT DEFAULT 'active',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (game_id) REFERENCES games(id)
@@ -62,7 +63,11 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_puzzles_user ON puzzles(user_id);
         CREATE INDEX IF NOT EXISTS idx_puzzles_game ON puzzles(game_id);
     """)
-    conn.commit()
+    # Migration: add status column if missing
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(puzzles)").fetchall()]
+    if "status" not in cols:
+        conn.execute("ALTER TABLE puzzles ADD COLUMN status TEXT DEFAULT 'active'")
+        conn.commit()
     conn.close()
 
 
@@ -171,6 +176,27 @@ def get_user_puzzles(user_id, limit=None):
         if limit:
             q += f" LIMIT {int(limit)}"
         return conn.execute(q, (user_id,)).fetchall()
+    finally:
+        conn.close()
+
+
+def get_queue_puzzles(user_id):
+    """Get puzzles for the main page queue: active first, then solved_retry."""
+    conn = get_db()
+    try:
+        return conn.execute("""
+            SELECT * FROM puzzles WHERE user_id = ? AND status IN ('active', 'solved_retry')
+            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'solved_retry' THEN 1 END, created_at
+        """, (user_id,)).fetchall()
+    finally:
+        conn.close()
+
+
+def update_puzzle_status(puzzle_id, status):
+    conn = get_db()
+    try:
+        conn.execute("UPDATE puzzles SET status = ? WHERE id = ?", (status, puzzle_id))
+        conn.commit()
     finally:
         conn.close()
 

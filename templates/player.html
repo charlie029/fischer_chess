@@ -81,7 +81,7 @@
 
   <h2>Recent Puzzles</h2>
   <table id="puzzles-table">
-    <thead><tr><th>Move</th><th>Turn</th><th>Reason</th><th>Best Move</th><th>Tactics</th></tr></thead>
+    <thead><tr><th>Move</th><th>Turn</th><th>Status</th><th>Best Move</th><th>Tactics</th><th></th></tr></thead>
     <tbody id="puzzles-body"></tbody>
   </table>
 
@@ -203,9 +203,10 @@ document.getElementById('apply-range-btn').addEventListener('click', updateTrend
 function renderPuzzles(puzzles) {
   const tbody = document.getElementById('puzzles-body');
   tbody.innerHTML = puzzles.map(p => `<tr>
-    <td>${p.move_number}</td><td>${p.turn}</td><td>${p.reason}</td>
+    <td>${p.move_number}</td><td>${p.turn}</td><td>${p.status||'active'}</td>
     <td>${p.best_move_san}</td>
     <td>${(p.tactics||'').split(',').map(t=>`<span class="tag">${t}</span>`).join('')}</td>
+    <td>${p.status !== 'active' ? `<button onclick="retryPuzzle(${p.id})" style="background:#0f3460;border:none;color:#e0e0e0;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:.8em;">Retry</button>` : ''}</td>
   </tr>`).join('');
 }
 
@@ -215,6 +216,14 @@ function renderGames(games) {
     <td>${g.date}</td><td>${g.white}</td><td>${g.black}</td><td>${g.result}</td><td>${g.total_moves}</td>
     <td><button onclick="deleteGame(${g.id})" style="background:none;border:none;color:#e94560;cursor:pointer;font-size:1.1em;">✕</button></td>
   </tr>`).join('');
+}
+
+async function retryPuzzle(puzzleId) {
+  await fetch(`/api/db/puzzles/${puzzleId}/status`, {
+    method:'PUT', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({status:'active'})
+  });
+  loadAll();
 }
 
 async function deleteGame(gameId) {
