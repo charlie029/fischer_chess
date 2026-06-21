@@ -67,7 +67,22 @@ def init_db():
     cols = [r[1] for r in conn.execute("PRAGMA table_info(puzzles)").fetchall()]
     if "status" not in cols:
         conn.execute("ALTER TABLE puzzles ADD COLUMN status TEXT DEFAULT 'active'")
-        conn.commit()
+    if "solved_at" not in cols:
+        conn.execute("ALTER TABLE puzzles ADD COLUMN solved_at TIMESTAMP")
+
+    # Badges table
+    conn.execute("""CREATE TABLE IF NOT EXISTS badges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        badge_type TEXT NOT NULL,
+        tier INTEGER NOT NULL,
+        name TEXT,
+        image_url TEXT,
+        earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        UNIQUE(user_id, badge_type, tier)
+    )""")
+    conn.commit()
     conn.close()
 
 
@@ -108,6 +123,7 @@ def delete_user(username):
             return False
         conn.execute("DELETE FROM puzzles WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM games WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM badges WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
         conn.commit()
         return True
@@ -193,10 +209,22 @@ def get_queue_puzzles(user_id):
 
 
 def update_puzzle_status(puzzle_id, status):
+    from badges import check_badges
     conn = get_db()
     try:
-        conn.execute("UPDATE puzzles SET status = ? WHERE id = ?", (status, puzzle_id))
+        if status in ("solved_first_try", "solved_retry"):
+            conn.execute("UPDATE puzzles SET status = ?, solved_at = CURRENT_TIMESTAMP WHERE id = ?",
+                         (status, puzzle_id))
+        else:
+            conn.execute("UPDATE puzzles SET status = ? WHERE id = ?", (status, puzzle_id))
         conn.commit()
+        # Check badges after a solve
+        if status in ("solved_first_try", "solved_retry"):
+            row = conn.execute("SELECT user_id FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
+            if row:
+                newly_earned = check_badges(conn, row[0])
+                return newly_earned
+        return []
     finally:
         conn.close()
 

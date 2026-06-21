@@ -79,6 +79,9 @@
   </div>
   <div class="chart-wrap"><canvas id="trend-chart" height="200"></canvas></div>
 
+  <h2>Achievements</h2>
+  <div id="badges-grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px;"></div>
+
   <h2>Recent Puzzles</h2>
   <table id="puzzles-table">
     <thead><tr><th>Move</th><th>Turn</th><th>Status</th><th>Best Move</th><th>Tactics</th><th></th></tr></thead>
@@ -96,16 +99,36 @@
 const USER = "{{ username }}";
 
 async function loadAll() {
-  const [stats, trends, puzzles, games] = await Promise.all([
+  const [stats, trends, puzzles, games, badgeData] = await Promise.all([
     fetch(`/api/db/users/${USER}/stats`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/trends`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/puzzles?limit=20`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/games?limit=20`).then(r=>r.json()),
+    fetch(`/api/db/users/${USER}/badges`).then(r=>r.json()),
   ]);
   renderStats(stats);
   renderTrends(trends);
   renderPuzzles(puzzles);
   renderGames(games);
+  renderBadges(badgeData);
+}
+
+function renderBadges(data) {
+  const grid = document.getElementById('badges-grid');
+  const earned = new Set(data.earned.map(b => b.badge_type + ':' + b.tier));
+  let html = '';
+  for (const [type, tiers] of Object.entries(data.definitions)) {
+    for (const [tier, threshold, name, img] of tiers) {
+      const has = earned.has(type + ':' + tier);
+      const opacity = has ? '1' : '0.25';
+      const label = type.replace(/_/g,' ');
+      html += `<div style="text-align:center;width:80px;opacity:${opacity}" title="${name} — ${label} (${threshold})">
+        <img src="${img}" style="width:56px;height:56px;image-rendering:pixelated;border-radius:8px;border:2px solid ${has?'#4ecca3':'#333'}">
+        <div style="font-size:.75em;color:${has?'#e0e0e0':'#555'};margin-top:4px">${name}</div>
+      </div>`;
+    }
+  }
+  grid.innerHTML = html || '<p style="color:#666">No badges yet. Start solving puzzles!</p>';
 }
 
 function renderStats(s) {

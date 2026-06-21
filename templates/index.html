@@ -351,10 +351,24 @@ async function loadUserPuzzles() {
 }
 
 async function setPuzzleStatus(puzzleId, status) {
-  await fetch(`/api/db/puzzles/${puzzleId}/status`, {
+  const resp = await fetch(`/api/db/puzzles/${puzzleId}/status`, {
     method:'PUT', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({status})
   });
+  const data = await resp.json();
+  if (data.new_badges && data.new_badges.length) {
+    data.new_badges.forEach(b => {
+      showBadgeNotification(b);
+    });
+  }
+}
+
+function showBadgeNotification(badge) {
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;top:20%;left:50%;transform:translateX(-50%);background:#16213e;border:2px solid #4ecca3;border-radius:16px;padding:24px 32px;z-index:9999;text-align:center;animation:fadeIn .3s';
+  div.innerHTML = `<img src="${badge.image}" style="width:80px;height:80px;image-rendering:pixelated;"><br><strong style="color:#4ecca3;font-size:1.2em;">Badge Earned!</strong><br><span style="color:#e0e0e0;font-size:1.1em;">${badge.name}</span><br><span style="color:#888;font-size:.85em;">${badge.type.replace('_',' ')}</span>`;
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 3000);
 }
 
 async function archivePuzzle() {

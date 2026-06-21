@@ -508,8 +508,22 @@ def api_db_update_puzzle_status(puzzle_id):
     status = data.get("status")
     if status not in ("active", "solved_first_try", "solved_retry", "archived"):
         return jsonify({"error": "Invalid status"}), 400
-    db.update_puzzle_status(puzzle_id, status)
-    return jsonify({"ok": True})
+    new_badges = db.update_puzzle_status(puzzle_id, status)
+    return jsonify({"ok": True, "new_badges": new_badges or []})
+
+
+@app.route("/api/db/users/<username>/badges", methods=["GET"])
+def api_db_user_badges(username):
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    from badges import get_user_badges, BADGES
+    conn = db.get_db()
+    try:
+        earned = [dict(r) for r in get_user_badges(conn, user["id"])]
+        return jsonify({"earned": earned, "definitions": BADGES})
+    finally:
+        conn.close()
 
 
 @app.route("/api/db/users/<username>/generate-puzzles", methods=["POST"])
