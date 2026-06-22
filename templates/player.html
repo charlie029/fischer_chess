@@ -123,34 +123,40 @@ function renderBadges(data) {
   const grid = document.getElementById('badges-grid');
   const earned = new Set(data.earned.map(b => b.badge_type + ':' + b.tier));
   const prog = data.progress || {};
+  const meta = data.meta || {};
   let html = '';
   for (const [type, tiers] of Object.entries(data.definitions)) {
+    const m = meta[type] || {};
     const current = prog[type] || 0;
-    // Find next unearned tier for progress bar
-    let nextThreshold = null, nextName = null;
+    const mysteryFrom = m.mystery_from || 99;
+    let nextThreshold = null;
     for (const [tier, threshold, name, img] of tiers) {
-      if (!earned.has(type + ':' + tier)) { nextThreshold = threshold; nextName = name; break; }
+      if (!earned.has(type + ':' + tier)) { nextThreshold = threshold; break; }
     }
-    // Category header with progress
     const pct = nextThreshold ? Math.min(100, Math.round(current / nextThreshold * 100)) : 100;
     const progLabel = nextThreshold ? `${current}/${nextThreshold}` : '✓ Complete!';
-    html += `<div style="width:100%;margin:12px 0 4px;display:flex;align-items:center;gap:10px;">
-      <span style="color:#e94560;font-size:.85em;font-weight:bold;min-width:120px">${type.replace(/_/g,' ').toUpperCase()}</span>
-      <div style="flex:1;background:#333;border-radius:4px;height:8px;max-width:200px;">
-        <div style="width:${pct}%;background:#4ecca3;border-radius:4px;height:100%;transition:width .3s"></div>
+    html += `<div style="width:100%;margin:16px 0 4px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span style="color:#e94560;font-size:.85em;font-weight:bold;min-width:140px">${m.label||type}</span>
+        <div style="flex:1;background:#333;border-radius:4px;height:8px;max-width:200px;">
+          <div style="width:${pct}%;background:#4ecca3;border-radius:4px;height:100%;transition:width .3s"></div>
+        </div>
+        <span style="color:#888;font-size:.75em">${progLabel}</span>
       </div>
-      <span style="color:#888;font-size:.75em">${progLabel}</span>
+      <div style="color:#666;font-size:.72em;margin:2px 0 6px;">${m.desc||''}</div>
     </div>`;
     html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">';
     for (const [tier, threshold, name, img] of tiers) {
       const has = earned.has(type + ':' + tier);
-      const mystery = !has && tier >= 3;
+      const mystery = !has && tier >= mysteryFrom;
       const displayName = mystery ? '???' : name;
-      const displayImg = mystery ? '' : `<img src="${img}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:2px solid ${has?'#4ecca3':'#333'}">`;
-      const placeholder = mystery ? `<div style="width:48px;height:48px;border-radius:8px;border:2px solid #333;display:flex;align-items:center;justify-content:center;font-size:1.4em;background:#1a1a2e">❓</div>` : '';
-      html += `<div style="text-align:center;width:70px;opacity:${has?'1':'0.4'}" title="${has?name:'???'} (${threshold})">
-        ${displayImg}${placeholder}
-        <div style="font-size:.7em;color:${has?'#e0e0e0':'#555'};margin-top:3px">${displayName}</div>
+      const isEmoji = img.length <= 4;
+      const displayImg = mystery ? `<div style="width:48px;height:48px;border-radius:8px;border:2px solid #333;display:flex;align-items:center;justify-content:center;font-size:1.4em;background:#1a1a2e">❓</div>`
+        : isEmoji ? `<div style="width:48px;height:48px;border-radius:8px;border:2px solid ${has?'#4ecca3':'#333'};display:flex;align-items:center;justify-content:center;font-size:1.8em;background:#1a1a2e">${img}</div>`
+        : `<img src="${img}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:2px solid ${has?'#4ecca3':'#333'}" onerror="this.style.display='none'">`;
+      html += `<div style="text-align:center;width:64px;opacity:${has?'1':'0.4'}" title="${has?name+' ('+threshold+')':'??? ('+threshold+')'}">
+        ${displayImg}
+        <div style="font-size:.65em;color:${has?'#e0e0e0':'#555'};margin-top:3px">${displayName}</div>
       </div>`;
     }
     html += '</div>';
