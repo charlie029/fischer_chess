@@ -114,6 +114,7 @@
     <button id="next-btn" disabled>Next →</button>
     <button id="hint-btn" disabled>Hint</button>
     <button id="archive-btn" style="background:#2a1a1a;border-color:#e94560">Skip</button>
+    <button id="bookmark-btn" style="background:#0f3460" title="Save to Worth a 2nd Look">★</button>
     <button id="engine-btn">Engine</button>
     <button id="stats-btn" style="background:#0f3460">Stats</button>
     <button id="trends-btn" style="background:#0f3460">Trends</button>
@@ -393,6 +394,17 @@ document.getElementById('hint-btn').addEventListener('click', () => {
 });
 
 document.getElementById('archive-btn').addEventListener('click', archivePuzzle);
+
+document.getElementById('bookmark-btn').addEventListener('click', async () => {
+  if (!puzzles.length) return;
+  const p = puzzles[idx];
+  await setPuzzleStatus(p.id, 'bookmarked');
+  puzzles.splice(idx, 1);
+  if (!puzzles.length) { showFeedback('Queue empty!', 'info'); return; }
+  if (idx >= puzzles.length) idx = puzzles.length - 1;
+  attempts = 0;
+  loadPuzzle();
+});
 
 $(window).resize(() => board.resize());
 

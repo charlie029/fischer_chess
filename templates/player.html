@@ -40,7 +40,6 @@
   <p class="subtitle"><a href="/">← Back to puzzles</a> | <a href="#" id="switch-user-link">Switch User</a></p>
 
   <div class="actions">
-    <button id="delete-btn" style="background:#2a1a1a;border-color:#e94560">Delete User</button>
   </div>
   <div id="status"></div>
 
@@ -82,9 +81,9 @@
   <h2>Achievements</h2>
   <div id="badges-grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px;"></div>
 
-  <h2>Recent Puzzles</h2>
+  <h2>Worth a 2nd Look</h2>
   <table id="puzzles-table">
-    <thead><tr><th>Move</th><th>Turn</th><th>Status</th><th>Best Move</th><th>Tactics</th><th></th></tr></thead>
+    <thead><tr><th>Move</th><th>Turn</th><th>Best Move</th><th>Tactics</th><th></th></tr></thead>
     <tbody id="puzzles-body"></tbody>
   </table>
 
@@ -93,6 +92,10 @@
     <thead><tr><th>Date</th><th>White</th><th>Black</th><th>Result</th><th>Moves</th><th></th></tr></thead>
     <tbody id="games-body"></tbody>
   </table>
+</div>
+
+<div style="margin-top:48px;padding:16px 0;border-top:1px solid #333;text-align:right;">
+  <button id="delete-btn" style="background:none;border:1px solid #555;color:#888;padding:4px 10px;border-radius:4px;font-size:.75em;cursor:pointer;">Delete User</button>
 </div>
 
 <script>
@@ -224,12 +227,17 @@ document.getElementById('y-axis-select').addEventListener('change', updateTrendC
 document.getElementById('apply-range-btn').addEventListener('click', updateTrendChart);
 
 function renderPuzzles(puzzles) {
+  const bookmarked = puzzles.filter(p => p.status === 'bookmarked');
   const tbody = document.getElementById('puzzles-body');
-  tbody.innerHTML = puzzles.map(p => `<tr>
-    <td>${p.move_number}</td><td>${p.turn}</td><td>${p.status||'active'}</td>
+  if (!bookmarked.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:#666;text-align:center;padding:16px">No bookmarked puzzles yet. Use the ★ button on the main page to save puzzles here.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = bookmarked.map(p => `<tr>
+    <td>${p.move_number}</td><td>${p.turn}</td>
     <td>${p.best_move_san}</td>
     <td>${(p.tactics||'').split(',').map(t=>`<span class="tag">${t}</span>`).join('')}</td>
-    <td>${p.status !== 'active' ? `<button onclick="retryPuzzle(${p.id})" style="background:#0f3460;border:none;color:#e0e0e0;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:.8em;">Retry</button>` : ''}</td>
+    <td><button onclick="retryPuzzle(${p.id})" style="background:#0f3460;border:none;color:#e0e0e0;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:.8em;">Retry</button></td>
   </tr>`).join('');
 }
 
@@ -262,7 +270,8 @@ document.getElementById('switch-user-link').addEventListener('click', (e) => {
 });
 
 document.getElementById('delete-btn').addEventListener('click', async () => {
-  if (!confirm(`Delete user "${USER}" and all their games/puzzles?`)) return;
+  if (!confirm(`Delete user "${USER}" and ALL their games, puzzles, and badges? This cannot be undone.`)) return;
+  if (!confirm(`Are you really sure? Type OK to confirm.`)) return;
   await fetch(`/api/db/users/${USER}`, {method:'DELETE'});
   window.location.href = '/';
 });

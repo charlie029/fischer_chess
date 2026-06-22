@@ -506,7 +506,7 @@ def api_db_puzzle_queue(username):
 def api_db_update_puzzle_status(puzzle_id):
     data = request.get_json() or {}
     status = data.get("status")
-    if status not in ("active", "solved_first_try", "solved_retry", "archived"):
+    if status not in ("active", "solved_first_try", "solved_retry", "archived", "bookmarked"):
         return jsonify({"error": "Invalid status"}), 400
     new_badges = db.update_puzzle_status(puzzle_id, status)
     return jsonify({"ok": True, "new_badges": new_badges or []})
