@@ -108,7 +108,7 @@ async function loadAll() {
   const [stats, trends, puzzles, games, badgeData] = await Promise.all([
     fetch(`/api/db/users/${USER}/stats`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/trends`).then(r=>r.json()),
-    fetch(`/api/db/users/${USER}/puzzles?limit=20`).then(r=>r.json()),
+    fetch(`/api/db/users/${USER}/puzzles`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/games`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/badges`).then(r=>r.json()),
   ]);
