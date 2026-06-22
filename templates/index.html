@@ -275,6 +275,15 @@ function onDrop(src, tgt) {
   } else {
     attempts++;
     game.undo();
+    if (attempts >= 3) {
+      showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
+      setPuzzleStatus(p.id, 'bookmarked');
+      puzzles.splice(idx, 1);
+      if (!puzzles.length) return;
+      if (idx >= puzzles.length) idx = puzzles.length - 1;
+      setTimeout(() => { attempts = 0; loadPuzzle(); }, 1500);
+      return;
+    }
     showFeedback('✗ Try again', 'wrong');
     return 'snapback';
   }
@@ -472,6 +481,16 @@ function handleChatMove() {
   } else {
     attempts++;
     game.undo();
+    if (attempts >= 3) {
+      chatMsg('Too tough! Saved to Worth a 2nd Look.', 'sys');
+      showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
+      setPuzzleStatus(p.id, 'bookmarked');
+      puzzles.splice(idx, 1);
+      if (!puzzles.length) return;
+      if (idx >= puzzles.length) idx = puzzles.length - 1;
+      setTimeout(() => { attempts = 0; loadPuzzle(); }, 1500);
+      return;
+    }
     chatMsg('Incorrect, try again.', 'err');
   }
 }
