@@ -54,7 +54,9 @@ Fischer Chess is a chess puzzle generation and training system that extracts blu
 - **FR-2.4.2**: Solved on first try → status `solved_first_try`, auto-removed from queue
 - **FR-2.4.3**: Solved on retry (wrong attempt then correct) → status `solved_retry`, stays in queue at bottom
 - **FR-2.4.4**: "Skip" button → status `archived`, removed from queue
-- **FR-2.4.5**: Puzzles stay in queue until manually archived via Skip
+- **FR-2.4.5**: "★ Bookmark" button → status `bookmarked`, saved to "Worth a 2nd Look" on stats page
+- **FR-2.4.6**: Puzzles stay in queue until manually archived or bookmarked
+- **FR-2.4.7**: Streak counter visible on main page (🔥 daily / ⚡ first-try / 📊 volume)
 
 ### 2.5 Puzzle Solving
 - **FR-2.5.1**: Interactive chessboard with drag-and-drop
@@ -90,17 +92,38 @@ Fischer Chess is a chess puzzle generation and training system that extracts blu
 - **FR-3.2.2**: Date range filter with Apply button
 - **FR-3.2.3**: Only shows analyzed games (INNER JOIN)
 
-### 3.3 Recent Puzzles Table
-- **FR-3.3.1**: Shows all puzzles with status, move, turn, best move, tactics
+### 3.3 Worth a 2nd Look
+- **FR-3.3.1**: Shows only `bookmarked` puzzles (★ from main page)
 - **FR-3.3.2**: "Retry" button sets puzzle back to `active` (returns to main page queue)
+- **FR-3.3.3**: Empty state message guides users to use ★ button on main page
 
-### 3.4 Recent Games Table
-- **FR-3.4.1**: Shows date, white, black, result, moves
-- **FR-3.4.2**: Per-row delete button (cascades to associated puzzles)
+### 3.4 Achievements / Badge System
+- **FR-3.4.1**: 7 badge categories, 41 total badges across all tiers
+- **FR-3.4.2**: Each category has label, description, progress bar, and configurable mystery tier
+- **FR-3.4.3**: Badges auto-awarded on puzzle solve via check_badges engine
+- **FR-3.4.4**: Badge notification popup on main page when earned
+- **FR-3.4.5**: Higher tiers hidden as "❓" mystery badges until earned (per-category threshold)
+- **FR-3.4.6**: Badge categories:
+  - First-Try Streak (4 tiers, Pokémon): consecutive first-try solves (3/7/15/30)
+  - Volume (4 tiers, Pokémon): total puzzles solved (10/50/100/500)
+  - Daily Streak (4 tiers, soccer legends): consecutive days solving (3/7/30/100)
+  - Comeback Kid (10 tiers, PL clubs): bookmarked puzzles solved on retry (1→50)
+  - Collector (10 tiers, PL players): total games imported (10→2000)
+  - Perfectionist (4 tiers, gems): first-try rate % with minimum solves (80%/85%/90%/95%)
+  - Game Crusher (5 tiers, Pokémon trainers): all puzzles from a game solved first-try (1→20)
+- **FR-3.4.7**: Images served locally from /static/badges/ (SVGs for clubs, PNGs for Pokémon, emoji for gems/players)
+- **FR-3.4.8**: solved_at timestamp on puzzles enables daily streak tracking
 
-### 3.5 Actions
-- **FR-3.5.1**: Delete User button (removes all user data)
-- **FR-3.5.2**: No import or Run Analysis on this page (those live on main page)
+### 3.5 Recent Games Table
+- **FR-3.5.1**: Shows date, white, black, result, moves
+- **FR-3.5.2**: Per-row delete button (cascades to associated puzzles)
+- **FR-3.5.3**: Paginated (20 games per page) with Prev/Next navigation
+- **FR-3.5.4**: Scrollable container (max-height 400px)
+
+### 3.6 Actions
+- **FR-3.6.1**: Delete User button at bottom of page (small, less prominent)
+- **FR-3.6.2**: Double-confirm dialog before deletion
+- **FR-3.6.3**: No import or Run Analysis on this page (those live on main page)
 
 ---
 
