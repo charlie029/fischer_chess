@@ -122,17 +122,38 @@ async function loadAll() {
 function renderBadges(data) {
   const grid = document.getElementById('badges-grid');
   const earned = new Set(data.earned.map(b => b.badge_type + ':' + b.tier));
+  const prog = data.progress || {};
   let html = '';
   for (const [type, tiers] of Object.entries(data.definitions)) {
+    const current = prog[type] || 0;
+    // Find next unearned tier for progress bar
+    let nextThreshold = null, nextName = null;
+    for (const [tier, threshold, name, img] of tiers) {
+      if (!earned.has(type + ':' + tier)) { nextThreshold = threshold; nextName = name; break; }
+    }
+    // Category header with progress
+    const pct = nextThreshold ? Math.min(100, Math.round(current / nextThreshold * 100)) : 100;
+    const progLabel = nextThreshold ? `${current}/${nextThreshold}` : '✓ Complete!';
+    html += `<div style="width:100%;margin:12px 0 4px;display:flex;align-items:center;gap:10px;">
+      <span style="color:#e94560;font-size:.85em;font-weight:bold;min-width:120px">${type.replace(/_/g,' ').toUpperCase()}</span>
+      <div style="flex:1;background:#333;border-radius:4px;height:8px;max-width:200px;">
+        <div style="width:${pct}%;background:#4ecca3;border-radius:4px;height:100%;transition:width .3s"></div>
+      </div>
+      <span style="color:#888;font-size:.75em">${progLabel}</span>
+    </div>`;
+    html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">';
     for (const [tier, threshold, name, img] of tiers) {
       const has = earned.has(type + ':' + tier);
-      const opacity = has ? '1' : '0.25';
-      const label = type.replace(/_/g,' ');
-      html += `<div style="text-align:center;width:80px;opacity:${opacity}" title="${name} — ${label} (${threshold})">
-        <img src="${img}" style="width:56px;height:56px;image-rendering:pixelated;border-radius:8px;border:2px solid ${has?'#4ecca3':'#333'}">
-        <div style="font-size:.75em;color:${has?'#e0e0e0':'#555'};margin-top:4px">${name}</div>
+      const mystery = !has && tier >= 3;
+      const displayName = mystery ? '???' : name;
+      const displayImg = mystery ? '' : `<img src="${img}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:2px solid ${has?'#4ecca3':'#333'}">`;
+      const placeholder = mystery ? `<div style="width:48px;height:48px;border-radius:8px;border:2px solid #333;display:flex;align-items:center;justify-content:center;font-size:1.4em;background:#1a1a2e">❓</div>` : '';
+      html += `<div style="text-align:center;width:70px;opacity:${has?'1':'0.4'}" title="${has?name:'???'} (${threshold})">
+        ${displayImg}${placeholder}
+        <div style="font-size:.7em;color:${has?'#e0e0e0':'#555'};margin-top:3px">${displayName}</div>
       </div>`;
     }
+    html += '</div>';
   }
   grid.innerHTML = html || '<p style="color:#666">No badges yet. Start solving puzzles!</p>';
 }

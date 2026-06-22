@@ -96,6 +96,7 @@
   <div id="user-section" style="text-align:center;margin-bottom:16px;">
     <div id="user-logged-in" style="display:none;">
       <span style="color:#4ecca3;font-weight:bold;font-size:1.1em;">👤 <span id="current-user-name"></span></span>
+      <span id="streak-display" style="margin-left:16px;font-size:.95em;"></span>
       <a href="#" id="user-profile-link" style="margin-left:12px;color:#8bb4f0;">My Profile</a>
       <button id="sign-off-btn" style="margin-left:12px;background:#333;padding:4px 12px;font-size:.85em;">Sign Off</button>
     </div>
@@ -349,6 +350,15 @@ async function loadUserPuzzles() {
   }));
   if (puzzles.length) { idx = 0; attempts = 0; loadPuzzle(); }
   else { showFeedback('No puzzles in queue. Import games and run analysis.', 'info'); }
+  // Load streaks
+  fetch(`/api/db/users/${activeProfile}/badges`).then(r=>r.json()).then(bd => {
+    const p = bd.progress || {};
+    let parts = [];
+    if (p.daily_streak) parts.push(`🔥${p.daily_streak}d`);
+    if (p.first_try_streak) parts.push(`⚡${p.first_try_streak}`);
+    parts.push(`📊${p.volume||0} solved`);
+    document.getElementById('streak-display').innerHTML = parts.join(' <span style="color:#555">|</span> ');
+  });
 }
 
 async function setPuzzleStatus(puzzleId, status) {

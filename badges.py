@@ -15,10 +15,10 @@ BADGES = {
         (4, 500, "Mew", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/151.png"),
     ],
     "daily_streak": [
-        (1, 3, "Messi", "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg/220px-Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg"),
-        (2, 7, "Ronaldo", "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Cristiano_Ronaldo_playing_for_Al_Nassr_FC_against_Persepolis%2C_September_2023_%28cropped%29.jpg/220px-Cristiano_Ronaldo_playing_for_Al_Nassr_FC_against_Persepolis%2C_September_2023_%28cropped%29.jpg"),
-        (3, 30, "Zidane", "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Zinedine_Zidane_by_Tasnim_03.jpg/220px-Zinedine_Zidane_by_Tasnim_03.jpg"),
-        (4, 100, "Pelé", "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Pel%C3%A9_con_la_maglia_del_Santos%2C_1970.jpg/220px-Pel%C3%A9_con_la_maglia_del_Santos%2C_1970.jpg"),
+        (1, 3, "Messi", "/static/badges/messi.jpg"),
+        (2, 7, "Ronaldo", "/static/badges/ronaldo.jpg"),
+        (3, 30, "Zidane", "/static/badges/zidane.jpg"),
+        (4, 100, "Pelé", "/static/badges/pele.jpg"),
     ],
 }
 
@@ -105,3 +105,53 @@ def get_user_badges(conn, user_id):
         "SELECT badge_type, tier, name, image_url, earned_at FROM badges WHERE user_id = ? ORDER BY earned_at DESC",
         (user_id,)
     ).fetchall()
+
+
+def get_progress(conn, user_id):
+    """Get current progress toward next badges."""
+    from datetime import date, timedelta
+
+    # Volume: total solved
+    total_solved = conn.execute(
+        "SELECT COUNT(*) FROM puzzles WHERE user_id = ? AND status IN ('solved_first_try', 'solved_retry')",
+        (user_id,)
+    ).fetchone()[0]
+
+    # First-try streak: current consecutive
+    rows = conn.execute(
+        "SELECT status FROM puzzles WHERE user_id = ? AND status IN ('solved_first_try','solved_retry') ORDER BY solved_at DESC",
+        (user_id,)
+    ).fetchall()
+    first_try_streak = 0
+    for r in rows:
+        if r[0] == "solved_first_try":
+            first_try_streak += 1
+        else:
+            break
+
+    # Daily streak
+    day_rows = conn.execute(
+        "SELECT DISTINCT date(solved_at) as d FROM puzzles WHERE user_id = ? AND solved_at IS NOT NULL ORDER BY d DESC",
+        (user_id,)
+    ).fetchall()
+    daily_streak = 0
+    today = date.today()
+    expected = today
+    for r in day_rows:
+        if r[0] is None:
+            break
+        d = date.fromisoformat(r[0])
+        if d == expected:
+            daily_streak += 1
+            expected -= timedelta(days=1)
+        elif daily_streak == 0 and d == today - timedelta(days=1):
+            daily_streak = 1
+            expected = d - timedelta(days=1)
+        else:
+            break
+
+    return {
+        "volume": total_solved,
+        "first_try_streak": first_try_streak,
+        "daily_streak": daily_streak,
+    }

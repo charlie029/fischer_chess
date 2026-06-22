@@ -517,11 +517,12 @@ def api_db_user_badges(username):
     user = db.get_user(username)
     if not user:
         return jsonify({"error": "User not found"}), 404
-    from badges import get_user_badges, BADGES
+    from badges import get_user_badges, get_progress, BADGES
     conn = db.get_db()
     try:
         earned = [dict(r) for r in get_user_badges(conn, user["id"])]
-        return jsonify({"earned": earned, "definitions": BADGES})
+        progress = get_progress(conn, user["id"])
+        return jsonify({"earned": earned, "definitions": BADGES, "progress": progress})
     finally:
         conn.close()
 
