@@ -44,9 +44,9 @@ BADGE_CONFIG = {
         "mystery_from": 6,
         "tiers": [
             (1, 1, "Fulham", "/static/badges/fulham.svg"),
-            (2, 3, "Brighton", "/static/badges/brighton.svg"),
+            (2, 3, "Brighton", "/static/badges/brighton.png"),
             (3, 5, "Newcastle", "/static/badges/newcastle.svg"),
-            (4, 7, "Aston Villa", "/static/badges/aston_villa.svg"),
+            (4, 7, "Aston Villa", "/static/badges/aston_villa.png"),
             (5, 10, "Tottenham", "/static/badges/tottenham.svg"),
             (6, 15, "Chelsea", "/static/badges/chelsea.svg"),
             (7, 20, "Liverpool", "/static/badges/liverpool.svg"),
