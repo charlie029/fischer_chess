@@ -15,10 +15,10 @@ BADGES = {
         (4, 500, "Mew", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/151.png"),
     ],
     "daily_streak": [
-        (1, 3, "Messi", "https://img.a.transfermarkt.technology/portrait/small/28003-1710080339.jpg"),
-        (2, 7, "Ronaldo", "https://img.a.transfermarkt.technology/portrait/small/8198-1714035801.jpg"),
-        (3, 30, "Zidane", "https://img.a.transfermarkt.technology/portrait/small/3111-1686927741.jpg"),
-        (4, 100, "Pelé", "https://img.a.transfermarkt.technology/portrait/small/5765-1672928070.jpg"),
+        (1, 3, "Messi", "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg/220px-Lionel-Messi-Argentina-2022-FIFA-World-Cup_%28cropped%29.jpg"),
+        (2, 7, "Ronaldo", "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Cristiano_Ronaldo_playing_for_Al_Nassr_FC_against_Persepolis%2C_September_2023_%28cropped%29.jpg/220px-Cristiano_Ronaldo_playing_for_Al_Nassr_FC_against_Persepolis%2C_September_2023_%28cropped%29.jpg"),
+        (3, 30, "Zidane", "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Zinedine_Zidane_by_Tasnim_03.jpg/220px-Zinedine_Zidane_by_Tasnim_03.jpg"),
+        (4, 100, "Pelé", "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Pel%C3%A9_con_la_maglia_del_Santos%2C_1970.jpg/220px-Pel%C3%A9_con_la_maglia_del_Santos%2C_1970.jpg"),
     ],
 }
 

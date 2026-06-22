@@ -88,10 +88,13 @@
   </table>
 
   <h2 style="margin-top:32px">Recent Games</h2>
+  <div style="max-height:400px;overflow-y:auto;border:1px solid #333;border-radius:8px;">
   <table id="games-table">
     <thead><tr><th>Date</th><th>White</th><th>Black</th><th>Result</th><th>Moves</th><th></th></tr></thead>
     <tbody id="games-body"></tbody>
   </table>
+  </div>
+  <div id="games-pagination" style="display:flex;gap:8px;justify-content:center;margin-top:10px;"></div>
 </div>
 
 <div style="margin-top:48px;padding:16px 0;border-top:1px solid #333;text-align:right;">
@@ -106,7 +109,7 @@ async function loadAll() {
     fetch(`/api/db/users/${USER}/stats`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/trends`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/puzzles?limit=20`).then(r=>r.json()),
-    fetch(`/api/db/users/${USER}/games?limit=20`).then(r=>r.json()),
+    fetch(`/api/db/users/${USER}/games`).then(r=>r.json()),
     fetch(`/api/db/users/${USER}/badges`).then(r=>r.json()),
   ]);
   renderStats(stats);
@@ -241,12 +244,31 @@ function renderPuzzles(puzzles) {
   </tr>`).join('');
 }
 
+let allGames = [], gamesPage = 0;
+const GAMES_PER_PAGE = 20;
+
 function renderGames(games) {
+  allGames = games;
+  gamesPage = 0;
+  renderGamesPage();
+}
+
+function renderGamesPage() {
+  const start = gamesPage * GAMES_PER_PAGE;
+  const page = allGames.slice(start, start + GAMES_PER_PAGE);
   const tbody = document.getElementById('games-body');
-  tbody.innerHTML = games.map(g => `<tr>
+  tbody.innerHTML = page.map(g => `<tr>
     <td>${g.date}</td><td>${g.white}</td><td>${g.black}</td><td>${g.result}</td><td>${g.total_moves}</td>
     <td><button onclick="deleteGame(${g.id})" style="background:none;border:none;color:#e94560;cursor:pointer;font-size:1.1em;">✕</button></td>
   </tr>`).join('');
+  const totalPages = Math.ceil(allGames.length / GAMES_PER_PAGE);
+  const pag = document.getElementById('games-pagination');
+  if (totalPages <= 1) { pag.innerHTML = ''; return; }
+  let html = '';
+  if (gamesPage > 0) html += `<button onclick="gamesPage--;renderGamesPage()" style="background:#0f3460;border:none;color:#e0e0e0;padding:4px 10px;border-radius:4px;cursor:pointer;">← Prev</button>`;
+  html += `<span style="color:#888;padding:4px 8px;">${gamesPage+1} / ${totalPages}</span>`;
+  if (gamesPage < totalPages - 1) html += `<button onclick="gamesPage++;renderGamesPage()" style="background:#0f3460;border:none;color:#e0e0e0;padding:4px 10px;border-radius:4px;cursor:pointer;">Next →</button>`;
+  pag.innerHTML = html;
 }
 
 async function retryPuzzle(puzzleId) {
