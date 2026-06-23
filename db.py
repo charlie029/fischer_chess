@@ -199,12 +199,12 @@ def get_user_puzzles(user_id, limit=None):
 
 
 def get_queue_puzzles(user_id):
-    """Get puzzles for the main page queue: active first, then solved_retry."""
+    """Get puzzles for the main page queue: active first, then solved_retry, then bookmarked."""
     conn = get_db()
     try:
         return conn.execute("""
-            SELECT * FROM puzzles WHERE user_id = ? AND status IN ('active', 'solved_retry')
-            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'solved_retry' THEN 1 END, created_at
+            SELECT * FROM puzzles WHERE user_id = ? AND status IN ('active', 'solved_retry', 'bookmarked')
+            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'solved_retry' THEN 1 WHEN 'bookmarked' THEN 2 END, created_at
         """, (user_id,)).fetchall()
     finally:
         conn.close()

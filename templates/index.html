@@ -255,21 +255,25 @@ function onDrop(src, tgt) {
     moveHistory = [game.history().pop() || p.solution_san]; redoStack = [];
     document.getElementById('explore-controls').style.display = 'flex';
     showFeedback('✓ Correct! ' + p.solution_san, 'correct');
-    if (attempts === 0) {
-      setPuzzleStatus(p.id, 'solved_first_try');
-      showFeedback('✓ Correct! (archived)', 'correct');
-    } else {
-      setPuzzleStatus(p.id, 'solved_retry');
+    if (p.status !== 'bookmarked') {
+      if (attempts === 0) {
+        setPuzzleStatus(p.id, 'solved_first_try');
+        showFeedback('✓ Correct! (archived)', 'correct');
+      } else {
+        setPuzzleStatus(p.id, 'solved_retry');
+      }
     }
   } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
     solved = true;
     moveHistory = [game.history().pop() || move.san]; redoStack = [];
     document.getElementById('explore-controls').style.display = 'flex';
     showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
-    if (attempts === 0) {
-      setPuzzleStatus(p.id, 'solved_first_try');
-    } else {
-      setPuzzleStatus(p.id, 'solved_retry');
+    if (p.status !== 'bookmarked') {
+      if (attempts === 0) {
+        setPuzzleStatus(p.id, 'solved_first_try');
+      } else {
+        setPuzzleStatus(p.id, 'solved_retry');
+      }
     }
   } else {
     attempts++;
@@ -464,7 +468,7 @@ function handleChatMove() {
     board.position(game.fen());
     chatMsg('✓ Correct! ' + p.solution_san, 'ok');
     showFeedback('✓ Correct! ' + p.solution_san, 'correct');
-    setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
+    if (p.status !== 'bookmarked') setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
   } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
     solved = true;
     moveHistory = [move.san]; redoStack = [];
@@ -472,7 +476,7 @@ function handleChatMove() {
     board.position(game.fen());
     chatMsg('✓ Acceptable! Best was ' + p.solution_san, 'ok');
     showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
-    setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
+    if (p.status !== 'bookmarked') setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
   } else {
     attempts++;
     game.undo();

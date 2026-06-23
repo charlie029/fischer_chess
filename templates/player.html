@@ -321,11 +321,7 @@ function renderGamesPage() {
 }
 
 async function retryPuzzle(puzzleId) {
-  await fetch(`/api/db/puzzles/${puzzleId}/status`, {
-    method:'PUT', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({status:'active'})
-  });
-  loadAll();
+  window.location.href = '/';
 }
 
 async function deleteGame(gameId) {
