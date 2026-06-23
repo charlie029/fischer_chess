@@ -62,6 +62,8 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_games_date ON games(date);
         CREATE INDEX IF NOT EXISTS idx_puzzles_user ON puzzles(user_id);
         CREATE INDEX IF NOT EXISTS idx_puzzles_game ON puzzles(game_id);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_games_dedup ON games(user_id, white, black, date, total_moves);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_puzzles_dedup ON puzzles(user_id, game_id, fen, best_move_uci);
     """)
     # Migration: add status column if missing
     cols = [r[1] for r in conn.execute("PRAGMA table_info(puzzles)").fetchall()]
@@ -174,7 +176,7 @@ def save_puzzle(user_id, game_id, fen, best_move_uci, best_move_san, played_move
                 reason, drop_cp, move_number, turn, tactics, acceptable_uci):
     conn = get_db()
     try:
-        conn.execute("""INSERT INTO puzzles 
+        conn.execute("""INSERT OR IGNORE INTO puzzles 
                         (user_id, game_id, fen, best_move_uci, best_move_san, played_move,
                          reason, drop_cp, move_number, turn, tactics, acceptable_uci)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
