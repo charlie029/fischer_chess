@@ -30,12 +30,18 @@ BADGE_CONFIG = {
     "daily_streak": {
         "label": "Daily Streak",
         "desc": "Solve at least 1 puzzle on consecutive days",
-        "mystery_from": 3,
+        "mystery_from": 6,
         "tiers": [
-            (1, 3, "Messi", "/static/badges/messi.jpg"),
-            (2, 7, "Ronaldo", "/static/badges/ronaldo.jpg"),
-            (3, 30, "Zidane", "/static/badges/zidane.jpg"),
-            (4, 100, "Pelé", "/static/badges/pele.jpg"),
+            (1, 1, "Rice", "/static/badges/rice.jpg"),
+            (2, 2, "Foden", "/static/badges/foden.jpg"),
+            (3, 3, "Messi", "/static/badges/messi.jpg"),
+            (4, 5, "Ronaldo", "/static/badges/ronaldo.jpg"),
+            (5, 7, "Lampard", "/static/badges/lampard.jpg"),
+            (6, 14, "Gerrard", "/static/badges/gerrard.jpg"),
+            (7, 21, "Rooney", "/static/badges/rooney.jpg"),
+            (8, 30, "Zidane", "/static/badges/zidane.jpg"),
+            (9, 60, "Maradona", "/static/badges/maradona.jpg"),
+            (10, 100, "Pelé", "/static/badges/pele.jpg"),
         ],
     },
     "comeback_kid": {
