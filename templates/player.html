@@ -84,7 +84,7 @@
   <h2>Worth a 2nd Look</h2>
   <div style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:8px;">
   <table id="puzzles-table">
-    <thead><tr><th>Move</th><th>Turn</th><th>Best Move</th><th>Tactics</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>White</th><th>Black</th><th>Tactics</th><th>Source</th><th></th></tr></thead>
     <tbody id="puzzles-body"></tbody>
   </table>
   </div>
@@ -271,16 +271,16 @@ function renderPuzzles(puzzles) {
 function renderPuzzlesPage() {
   const tbody = document.getElementById('puzzles-body');
   if (!allBookmarked.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:#666;text-align:center;padding:16px">No bookmarked puzzles yet. Use the ★ button on the main page to save puzzles here.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="color:#666;text-align:center;padding:16px">No bookmarked puzzles yet. Use the ★ button on the main page to save puzzles here.</td></tr>';
     document.getElementById('puzzles-pagination').innerHTML = '';
     return;
   }
   const start = puzzlesPage * PUZZLES_PER_PAGE;
   const page = allBookmarked.slice(start, start + PUZZLES_PER_PAGE);
   tbody.innerHTML = page.map(p => `<tr>
-    <td>${p.move_number}</td><td>${p.turn}</td>
-    <td>${p.best_move_san}</td>
+    <td>${p.game_date||''}</td><td>${p.game_white||''}</td><td>${p.game_black||''}</td>
     <td>${(p.tactics||'').split(',').map(t=>`<span class="tag">${t}</span>`).join('')}</td>
+    <td style="font-size:.8em;color:#888">${p.source||''}</td>
     <td><button onclick="retryPuzzle(${p.id})" style="background:#0f3460;border:none;color:#e0e0e0;cursor:pointer;padding:4px 8px;border-radius:4px;font-size:.8em;">Retry</button></td>
   </tr>`).join('');
   const totalPages = Math.ceil(allBookmarked.length / PUZZLES_PER_PAGE);

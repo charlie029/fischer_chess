@@ -190,7 +190,10 @@ def save_puzzle(user_id, game_id, fen, best_move_uci, best_move_san, played_move
 def get_user_puzzles(user_id, limit=None):
     conn = get_db()
     try:
-        q = "SELECT * FROM puzzles WHERE user_id = ? ORDER BY created_at DESC"
+        q = """SELECT p.*, g.date as game_date, g.white as game_white, g.black as game_black,
+               CASE WHEN g.chess_com_id IS NOT NULL THEN 'Chess.com' ELSE 'Local PGN' END as source
+               FROM puzzles p LEFT JOIN games g ON p.game_id = g.id
+               WHERE p.user_id = ? ORDER BY p.created_at DESC"""
         if limit:
             q += f" LIMIT {int(limit)}"
         return conn.execute(q, (user_id,)).fetchall()
