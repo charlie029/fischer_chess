@@ -10,10 +10,10 @@ BADGE_CONFIG = {
         "desc": "Solve puzzles correctly on the first attempt in a row",
         "mystery_from": 3,
         "tiers": [
-            (1, 3, "Pikachu", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png"),
-            (2, 7, "Raichu", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/26.png"),
-            (3, 15, "Zapdos", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/145.png"),
-            (4, 30, "Mewtwo", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/150.png"),
+            (1, 3, "Pikachu", "/static/badges/pokemon_25.png"),
+            (2, 7, "Raichu", "/static/badges/pokemon_26.png"),
+            (3, 15, "Zapdos", "/static/badges/pokemon_145.png"),
+            (4, 30, "Mewtwo", "/static/badges/pokemon_150.png"),
         ],
     },
     "volume": {
@@ -21,10 +21,10 @@ BADGE_CONFIG = {
         "desc": "Total puzzles solved (any method)",
         "mystery_from": 3,
         "tiers": [
-            (1, 10, "Charmander", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png"),
-            (2, 50, "Charmeleon", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/5.png"),
-            (3, 100, "Charizard", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/6.png"),
-            (4, 500, "Mew", "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/151.png"),
+            (1, 10, "Charmander", "/static/badges/pokemon_4.png"),
+            (2, 50, "Charmeleon", "/static/badges/pokemon_5.png"),
+            (3, 100, "Charizard", "/static/badges/pokemon_6.png"),
+            (4, 500, "Mew", "/static/badges/pokemon_151.png"),
         ],
     },
     "daily_streak": {

@@ -281,6 +281,12 @@ function onDrop(src, tgt) {
     if (attempts >= 3) {
       showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
       setPuzzleStatus(p.id, 'bookmarked');
+      p.status = 'bookmarked';
+      // Move to end of queue and advance
+      puzzles.splice(idx, 1);
+      puzzles.push(p);
+      if (idx >= puzzles.length) idx = 0;
+      setTimeout(() => { attempts = 0; loadPuzzle(); }, 1200);
       return;
     }
     showFeedback('✗ Try again', 'wrong');
@@ -417,9 +423,11 @@ document.getElementById('bookmark-btn').addEventListener('click', async () => {
   if (!puzzles.length) return;
   const p = puzzles[idx];
   await setPuzzleStatus(p.id, 'bookmarked');
+  p.status = 'bookmarked';
+  // Move to end of queue instead of removing
   puzzles.splice(idx, 1);
-  if (!puzzles.length) { showFeedback('Queue empty!', 'info'); return; }
-  if (idx >= puzzles.length) idx = puzzles.length - 1;
+  puzzles.push(p);
+  if (idx >= puzzles.length) idx = 0;
   attempts = 0;
   loadPuzzle();
 });
@@ -484,6 +492,11 @@ function handleChatMove() {
       chatMsg('Too tough! Saved to Worth a 2nd Look.', 'sys');
       showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
       setPuzzleStatus(p.id, 'bookmarked');
+      p.status = 'bookmarked';
+      puzzles.splice(idx, 1);
+      puzzles.push(p);
+      if (idx >= puzzles.length) idx = 0;
+      setTimeout(() => { attempts = 0; loadPuzzle(); }, 1200);
       return;
     }
     chatMsg('Incorrect, try again.', 'err');

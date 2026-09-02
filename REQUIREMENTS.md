@@ -98,7 +98,7 @@ Fischer Chess is a chess puzzle generation and training system that extracts blu
 - **FR-3.3.3**: Empty state message guides users to use ★ button on main page
 
 ### 3.4 Achievements / Badge System
-- **FR-3.4.1**: 7 badge categories, 41 total badges across all tiers
+- **FR-3.4.1**: 7 badge categories, 54 total badges across all tiers
 - **FR-3.4.2**: Each category has label, description, progress bar, and configurable mystery tier
 - **FR-3.4.3**: Badges auto-awarded on puzzle solve via check_badges engine
 - **FR-3.4.4**: Badge notification popup on main page when earned
@@ -106,7 +106,7 @@ Fischer Chess is a chess puzzle generation and training system that extracts blu
 - **FR-3.4.6**: Badge categories:
   - First-Try Streak (4 tiers, Pokémon): consecutive first-try solves (3/7/15/30)
   - Volume (4 tiers, Pokémon): total puzzles solved (10/50/100/500)
-  - Daily Streak (4 tiers, soccer legends): consecutive days solving (3/7/30/100)
+  - Daily Streak (17 tiers, soccer/football legends): consecutive days solving (1/2/3/.../365)
   - Comeback Kid (10 tiers, PL clubs): bookmarked puzzles solved on retry (1→50)
   - Collector (10 tiers, PL players): total games imported (10→2000)
   - Perfectionist (4 tiers, gems): first-try rate % with minimum solves (80%/85%/90%/95%)

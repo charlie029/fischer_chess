@@ -10,8 +10,51 @@ from stats import generate_stats_for_file, analyze_puzzle_tactics, build_player_
 import db
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('FISCHER_SECRET_KEY', 'change-me-in-production-' + str(os.getpid()))
 
 PUZZLE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# --- Password gate (FR-2.1.3) ---
+APP_PASSWORD = os.environ.get('FISCHER_PASSWORD', 'fischer')
+
+from functools import wraps
+from flask import session, redirect, url_for
+
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('authenticated'):
+            # For API calls, return 401; for pages, redirect to login
+            if request.path.startswith('/api/'):
+                return jsonify({"error": "Authentication required"}), 401
+            return redirect(url_for('login_page'))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/login", methods=["GET", "POST"])
+def login_page():
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        if pw == APP_PASSWORD:
+            session['authenticated'] = True
+            return redirect(url_for('index'))
+        return render_template("login.html", error="Wrong password"), 401
+    return render_template("login.html", error=None)
+
+@app.route("/logout")
+def logout():
+    session.pop('authenticated', None)
+    return redirect(url_for('login_page'))
+
+@app.before_request
+def require_login():
+    # Allow login page and static files without auth
+    if request.path in ('/login', '/logout') or request.path.startswith('/static/'):
+        return
+    if not session.get('authenticated'):
+        if request.path.startswith('/api/'):
+            return jsonify({"error": "Authentication required"}), 401
+        return redirect(url_for('login_page'))
 
 
 def load_puzzles(pgn_path):
@@ -139,6 +182,8 @@ def api_stats_player(name):
     """Get full stats for a player."""
     import json
     safe = name.replace(" ", "_").lower()
+    if ".." in safe or "/" in safe or "\\" in safe:
+        return jsonify({"error": "Invalid name"}), 400
     path = os.path.join(STATS_DIR, f"{safe}.json")
     if not os.path.isfile(path):
         return jsonify({"error": "Player not found"}), 404
@@ -540,7 +585,7 @@ def api_db_generate_puzzles(username):
 
     data = request.get_json() or {}
     threshold = data.get("threshold", 200)
-    depth = data.get("depth", 15)
+    depth = data.get("depth", 12)
     limit = data.get("limit", 50)  # max games to analyze
     player_name = data.get("player_name", "").strip()  # name as it appears in PGN headers
 
@@ -599,4 +644,5 @@ def api_db_user_trends(username):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    app.run(debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true',
+            host='0.0.0.0', port=5001)
