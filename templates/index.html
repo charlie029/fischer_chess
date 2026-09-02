@@ -28,7 +28,9 @@
   .turn-badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: .85em; }
   .turn-badge.white { background: #fff; color: #111; }
   .turn-badge.black { background: #333; color: #fff; }
-  .counter { font-size: .9em; color: #888; }
+  .counter { font-size: .9em; color: #888; cursor: pointer; }
+  .counter input { width: 40px; background: #0d1117; border: 1px solid #444; border-radius: 4px; color: #e0e0e0; text-align: center; font-size: .9em; padding: 2px 4px; -moz-appearance: textfield; }
+  .counter input::-webkit-outer-spin-button, .counter input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   #hint-btn { background: #0f3460; }
   .chat-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; background: #16213e; border-radius: 10px; height: 440px; }
   .chat-panel h3 { color: #e94560; padding: 12px 14px 8px; font-size: .95em; text-transform: uppercase; letter-spacing: 1px; }
@@ -111,7 +113,7 @@
   <div id="profile-summary"></div>
   <div class="controls">
     <button id="prev-btn" disabled>← Prev</button>
-    <span class="counter" id="counter">0 / 0</span>
+    <span class="counter" id="counter"><input id="counter-input" type="number" min="1" value="0"> / <span id="counter-total">0</span></span>
     <button id="next-btn" disabled>Next →</button>
     <button id="hint-btn" disabled>Hint</button>
     <button id="archive-btn" style="background:#2a1a1a;border-color:#e94560">Skip</button>
@@ -329,7 +331,9 @@ function loadPuzzle() {
   moveHistory = []; redoStack = [];
   document.getElementById('explore-controls').style.display = 'none';
   showFeedback('Find the best move for ' + p.turn, 'info');
-  document.getElementById('counter').textContent = (idx + 1) + ' / ' + puzzles.length;
+  document.getElementById('counter-input').value = idx + 1;
+  document.getElementById('counter-input').max = puzzles.length;
+  document.getElementById('counter-total').textContent = puzzles.length;
   document.getElementById('prev-btn').disabled = idx === 0;
   document.getElementById('next-btn').disabled = idx === puzzles.length - 1;
   document.getElementById('hint-btn').disabled = false;
@@ -410,6 +414,19 @@ async function archivePuzzle() {
 
 document.getElementById('prev-btn').addEventListener('click', () => { if (idx > 0) { idx--; loadPuzzle(); } });
 document.getElementById('next-btn').addEventListener('click', () => { if (idx < puzzles.length - 1) { idx++; loadPuzzle(); } });
+
+document.getElementById('counter-input').addEventListener('change', function() {
+  const val = parseInt(this.value);
+  if (!isNaN(val) && val >= 1 && val <= puzzles.length) {
+    idx = val - 1;
+    loadPuzzle();
+  } else {
+    this.value = idx + 1;
+  }
+});
+document.getElementById('counter-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { this.blur(); }
+});
 document.getElementById('hint-btn').addEventListener('click', () => {
   if (!puzzles.length) return;
   const p = puzzles[idx];

@@ -80,6 +80,10 @@ Fischer Chess is a chess puzzle generation and training system that extracts blu
 - **FR-2.8.2**: FEN is copyable
 - **FR-2.8.3**: Display game info (white, black, event, date) alongside each puzzle from DB-stored game data
 
+### 2.9 Puzzle Navigation
+- **FR-2.9.1**: Prev/Next buttons to step through puzzle queue
+- **FR-2.9.2**: Editable puzzle number input — user can type a number to jump directly to any puzzle in the queue
+
 ---
 
 ## 3. Web Application — Player/Stats Page
