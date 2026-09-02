@@ -360,7 +360,8 @@ async function loadUserPuzzles() {
     acceptable_uci: (p.acceptable_uci||'').split(',').filter(x=>x),
     tactics: (p.tactics||'').split(',').filter(x=>x),
     move_number: p.move_number, status: p.status,
-    white: '', black: '', event: '', date: ''
+    white: p.game_white || '?', black: p.game_black || '?',
+    event: p.game_event || '', date: p.game_date || ''
   }));
   if (puzzles.length) { idx = 0; attempts = 0; loadPuzzle(); }
   else { showFeedback('No puzzles in queue. Import games and run analysis.', 'info'); }

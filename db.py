@@ -206,8 +206,11 @@ def get_queue_puzzles(user_id):
     conn = get_db()
     try:
         return conn.execute("""
-            SELECT * FROM puzzles WHERE user_id = ? AND status IN ('active', 'solved_retry', 'bookmarked')
-            ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'solved_retry' THEN 1 WHEN 'bookmarked' THEN 2 END, created_at
+            SELECT p.*, g.date as game_date, g.white as game_white, g.black as game_black,
+                   g.event as game_event, g.result as game_result
+            FROM puzzles p LEFT JOIN games g ON p.game_id = g.id
+            WHERE p.user_id = ? AND p.status IN ('active', 'solved_retry', 'bookmarked')
+            ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'solved_retry' THEN 1 WHEN 'bookmarked' THEN 2 END, p.created_at
         """, (user_id,)).fetchall()
     finally:
         conn.close()
