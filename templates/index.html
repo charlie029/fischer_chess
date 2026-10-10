@@ -260,9 +260,11 @@ function onDrop(src, tgt) {
     if (p.status !== 'bookmarked') {
       if (attempts === 0) {
         setPuzzleStatus(p.id, 'solved_first_try');
+        markSolvedInQueue(p, 'solved_first_try');
         showFeedback('✓ Correct! (archived)', 'correct');
       } else {
         setPuzzleStatus(p.id, 'solved_retry');
+        markSolvedInQueue(p, 'solved_retry');
       }
     }
   } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
@@ -273,8 +275,10 @@ function onDrop(src, tgt) {
     if (p.status !== 'bookmarked') {
       if (attempts === 0) {
         setPuzzleStatus(p.id, 'solved_first_try');
+        markSolvedInQueue(p, 'solved_first_try');
       } else {
         setPuzzleStatus(p.id, 'solved_retry');
+        markSolvedInQueue(p, 'solved_retry');
       }
     }
   } else {
@@ -393,6 +397,37 @@ async function setPuzzleStatus(puzzleId, status) {
   }
 }
 
+// Keep the in-memory queue (and the counter total) in sync with a solve.
+// solved_first_try is archived out of the active pool, so remove it.
+// solved_retry stays but drops to the end of the queue (matches backend ordering).
+// The current board is left untouched so the user can keep exploring; the
+// counter reflects the new pool size and advancing with Next loads the next puzzle.
+function markSolvedInQueue(p, status) {
+  const i = puzzles.indexOf(p);
+  if (i === -1) return;
+  p.status = status;
+  if (status === 'solved_first_try') {
+    puzzles.splice(i, 1);
+    // idx now points at the puzzle that shifted into this slot (the next one),
+    // which is what Next/Prev and the counter should reference.
+    if (idx > i) idx--;
+    if (idx >= puzzles.length) idx = Math.max(0, puzzles.length - 1);
+  } else if (status === 'solved_retry') {
+    puzzles.splice(i, 1);
+    puzzles.push(p);
+    if (idx > i) idx--;
+    if (idx >= puzzles.length) idx = Math.max(0, puzzles.length - 1);
+  }
+  // Refresh the counter without reloading the board (exploration continues).
+  const total = puzzles.length;
+  document.getElementById('counter-total').textContent = total;
+  const input = document.getElementById('counter-input');
+  input.max = total;
+  input.value = total ? idx + 1 : 0;
+  document.getElementById('next-btn').disabled = idx >= total - 1;
+  document.getElementById('prev-btn').disabled = idx === 0;
+}
+
 function showBadgeNotification(badge) {
   const div = document.createElement('div');
   div.style.cssText = 'position:fixed;top:20%;left:50%;transform:translateX(-50%);background:#16213e;border:2px solid #4ecca3;border-radius:16px;padding:24px 32px;z-index:9999;text-align:center;animation:fadeIn .3s';
@@ -494,7 +529,11 @@ function handleChatMove() {
     board.position(game.fen());
     chatMsg('✓ Correct! ' + p.solution_san, 'ok');
     showFeedback('✓ Correct! ' + p.solution_san, 'correct');
-    if (p.status !== 'bookmarked') setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
+    if (p.status !== 'bookmarked') {
+      const st = attempts === 0 ? 'solved_first_try' : 'solved_retry';
+      setPuzzleStatus(p.id, st);
+      markSolvedInQueue(p, st);
+    }
   } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
     solved = true;
     moveHistory = [move.san]; redoStack = [];
@@ -502,7 +541,11 @@ function handleChatMove() {
     board.position(game.fen());
     chatMsg('✓ Acceptable! Best was ' + p.solution_san, 'ok');
     showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
-    if (p.status !== 'bookmarked') setPuzzleStatus(p.id, attempts === 0 ? 'solved_first_try' : 'solved_retry');
+    if (p.status !== 'bookmarked') {
+      const st = attempts === 0 ? 'solved_first_try' : 'solved_retry';
+      setPuzzleStatus(p.id, st);
+      markSolvedInQueue(p, st);
+    }
   } else {
     attempts++;
     game.undo();
