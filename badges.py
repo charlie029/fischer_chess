@@ -191,7 +191,12 @@ def check_badges(conn, user_id):
         if (badge_type, tier) not in existing:
             conn.execute("INSERT INTO badges (user_id, badge_type, tier, name, image_url) VALUES (?,?,?,?,?)",
                          (user_id, badge_type, tier, name, img))
-            newly_earned.append({"type": badge_type, "tier": tier, "name": name, "image": img})
+            earned = {"type": badge_type, "tier": tier, "name": name, "image": img}
+            # Previous tier lets the frontend play an evolution (e.g. Abra -> Kadabra).
+            prev = [t for t in BADGES.get(badge_type, []) if t[0] == tier - 1]
+            if prev:
+                earned["prev_name"], earned["prev_image"] = prev[0][2], prev[0][3]
+            newly_earned.append(earned)
 
     # --- Volume ---
     total_solved = conn.execute(
