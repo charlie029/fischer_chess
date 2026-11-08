@@ -917,7 +917,7 @@ document.getElementById('pgn-file-input').addEventListener('change', async (e) =
   e.target.value = '';
   if (d.error) { document.getElementById('import-local-btn').disabled = false; document.getElementById('import-local-btn').textContent = 'Import Local PGN'; alert(d.error); return; }
   // Auto-analyze
-  document.getElementById('import-local-btn').textContent = `Analyzing ${d.imported} games...`;
+  document.getElementById('import-local-btn').textContent = `Analyzing ${(d.game_ids || []).length} games...`;
   const r2 = await fetch(`/api/db/users/${activeProfile}/generate-puzzles`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({game_ids: d.game_ids || [], depth:12, player_name: playerName})
@@ -925,7 +925,9 @@ document.getElementById('pgn-file-input').addEventListener('change', async (e) =
   const d2 = await r2.json();
   document.getElementById('import-local-btn').disabled = false;
   document.getElementById('import-local-btn').textContent = 'Import Local PGN';
-  alert(`Imported ${d.imported} games, generated ${d2.puzzles_generated} puzzles.`);
+  const dupCount = (d.game_ids || []).length - d.imported;
+  alert(`Imported ${d.imported} new games` + (dupCount > 0 ? ` (${dupCount} already in profile, re-analyzed)` : '') +
+        `, analyzed ${d2.games_analyzed || 0}, generated ${d2.puzzles_generated} puzzles.`);
   loadUserPuzzles();
 });
 

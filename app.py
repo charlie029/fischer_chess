@@ -529,6 +529,12 @@ def api_db_import_pgn(username):
         if game_id:
             imported += 1
             new_ids.append(game_id)
+        else:
+            # Already in the profile: still analyze it, since the user explicitly uploaded it.
+            existing_id = db.find_game_id(user["id"], h.get("White", "?"), h.get("Black", "?"),
+                                          h.get("Date", ""), total_moves)
+            if existing_id and existing_id not in new_ids:
+                new_ids.append(existing_id)
     return jsonify({"imported": imported, "game_ids": new_ids, "username": username})
 
 
@@ -651,6 +657,188 @@ def api_db_user_trends(username):
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify(db.get_user_trends(user["id"]))
+
+
+# --- Loss Analysis & Lichess Import endpoints ---
+
+@app.route("/analysis/<username>")
+def analysis_page(username):
+    user = db.get_user(username)
+    if not user:
+        return "User not found", 404
+    return render_template("analysis.html", username=username)
+
+
+@app.route("/api/db/users/<username>/lichess", methods=["PUT"])
+def api_db_update_lichess(username):
+    """Update a user's Lichess username."""
+    data = request.get_json() or {}
+    lichess_username = data.get("lichess_username", "").strip()
+    if not lichess_username:
+        return jsonify({"error": "lichess_username required"}), 400
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    db.update_user_lichess(username, lichess_username)
+    return jsonify({"ok": True, "lichess_username": lichess_username})
+
+
+@app.route("/api/db/users/<username>/import-lichess", methods=["POST"])
+def api_db_import_lichess(username):
+    """Import games from Lichess into the database."""
+    from lichess_import import (fetch_lichess_games, lichess_game_to_pgn,
+                                 get_lichess_game_id)
+    import io as _io
+
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    lichess_user = data.get("lichess_username", "").strip()
+    if not lichess_user:
+        user_dict = dict(user)
+        lichess_user = user_dict.get("lichess_username") or username
+    from_date = data.get("from_date", "")
+    to_date = data.get("to_date", "")
+    max_games = data.get("max_games", 500)
+
+    # Update stored lichess username
+    if lichess_user:
+        db.update_user_lichess(username, lichess_user)
+
+    imported = 0
+    errors = 0
+    try:
+        for game_dict in fetch_lichess_games(lichess_user, from_date, to_date, max_games):
+            try:
+                pgn_text = lichess_game_to_pgn(game_dict)
+                lichess_id = get_lichess_game_id(game_dict)
+
+                # Parse PGN to extract headers
+                g = chess.pgn.read_game(_io.StringIO(pgn_text))
+                if not g:
+                    continue
+                h = g.headers
+                total_moves = sum(1 for _ in g.mainline())
+
+                game_id = db.save_game_with_lichess_id(
+                    user["id"], pgn_text,
+                    h.get("White", "?"), h.get("Black", "?"),
+                    h.get("Result", "*"), h.get("Date", "").replace(".", "-"),
+                    h.get("Event", ""), total_moves, lichess_id
+                )
+                if game_id:
+                    imported += 1
+            except Exception:
+                errors += 1
+                continue
+    except Exception as e:
+        return jsonify({"error": str(e), "imported": imported}), 500
+
+    return jsonify({"imported": imported, "errors": errors, "username": username})
+
+
+@app.route("/api/db/users/<username>/analyze-losses", methods=["POST"])
+def api_db_analyze_losses(username):
+    """Analyze all unanalyzed games for a user. Returns SSE progress stream."""
+    from loss_analysis import analyze_game_for_loss
+    import io as _io
+
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json() or {}
+    from_date = data.get("from_date", "")
+    to_date = data.get("to_date", "")
+    force = data.get("force", False)
+
+    if force:
+        # Re-analyze all games in date range
+        games = db.get_user_games(user["id"])
+        if from_date:
+            games = [g for g in games if g["date"] >= from_date]
+        if to_date:
+            games = [g for g in games if g["date"] <= to_date]
+    else:
+        games = db.get_unanalyzed_games(user["id"], from_date or None, to_date or None)
+
+    total = len(games)
+    if total == 0:
+        return jsonify({"message": "No games to analyze", "analyzed": 0})
+
+    # Determine player name for matching
+    user_dict = dict(user)
+    player_name = (user_dict.get("lichess_username") or
+                   user_dict.get("chess_com_username") or
+                   user_dict["username"])
+
+    def stream():
+        import json
+        analyzed = 0
+        for i, game_row in enumerate(games):
+            game_result = "error"
+            game_category = None
+            try:
+                pgn_text = game_row["pgn"]
+                analysis = analyze_game_for_loss(pgn_text, player_name)
+                game_result = analysis.result
+                game_category = analysis.loss_category
+
+                db.save_game_analysis(
+                    user["id"], game_row["id"],
+                    analysis.result, analysis.user_color,
+                    analysis.loss_category, analysis.loss_description,
+                    analysis.worst_move_number, analysis.worst_move_san,
+                    analysis.worst_move_cp_loss,
+                    analysis.eval_before_worst, analysis.eval_after_worst,
+                    analysis.total_blunders, analysis.total_mistakes,
+                    analysis.total_inaccuracies,
+                    analysis.avg_cp_loss, analysis.accuracy,
+                    analysis.opening_name, analysis.time_control,
+                )
+                analyzed += 1
+            except Exception as e:
+                pass  # skip failed games
+
+            opponent = game_row["white"] if player_name.lower() in (game_row["black"] or "").lower() else game_row["black"]
+            progress = json.dumps({
+                "game": i + 1, "total": total,
+                "current": f"vs {opponent}",
+                "result": game_result,
+                "category": game_category,
+            })
+            yield f"data: {progress}\n\n"
+
+        yield f"data: {json.dumps({'done': True, 'analyzed': analyzed, 'total': total})}\n\n"
+
+    return app.response_class(stream(), mimetype="text/event-stream")
+
+
+@app.route("/api/db/users/<username>/loss-summary", methods=["GET"])
+def api_db_loss_summary(username):
+    """Get aggregated loss analysis summary."""
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    from_date = request.args.get("from_date", "")
+    to_date = request.args.get("to_date", "")
+    summary = db.get_loss_summary(
+        user["id"],
+        from_date or None,
+        to_date or None,
+    )
+    return jsonify(summary)
+
+
+@app.route("/api/db/users/<username>/loss-detail/<int:game_id>", methods=["GET"])
+def api_db_loss_detail(username, game_id):
+    """Get full loss analysis for a single game."""
+    detail = db.get_loss_detail(game_id)
+    if not detail:
+        return jsonify({"error": "Analysis not found"}), 404
+    return jsonify(detail)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ username }} — Loss Analysis — Fischer Chess</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; padding: 24px; }
+  .container { max-width: 1100px; margin: 0 auto; }
+  h1 { color: #e94560; margin-bottom: 8px; }
+  h2 { color: #e94560; font-size: 1.1em; margin: 24px 0 12px; text-transform: uppercase; letter-spacing: 1px; }
+  .subtitle { color: #888; margin-bottom: 24px; }
+  a { color: #4ecca3; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .stats-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .stat-box { background: #16213e; border-radius: 10px; padding: 16px 24px; text-align: center; min-width: 120px; flex: 1; }
+  .stat-val { font-size: 1.8em; font-weight: bold; color: #4ecca3; }
+  .stat-label { font-size: .8em; color: #888; margin-top: 4px; }
+  .chart-wrap { background: #16213e; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+  .chart-row { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  .chart-half { flex: 1; min-width: 300px; }
+  table { width: 100%; border-collapse: collapse; font-size: .88em; }
+  th { text-align: left; color: #888; padding: 8px; border-bottom: 1px solid #333; }
+  td { padding: 8px; border-bottom: 1px solid #222; }
+  button { padding: 8px 16px; border-radius: 6px; border: 1px solid #333; background: #16213e; color: #e0e0e0; font-size: 14px; cursor: pointer; }
+  button:hover { background: #e94560; }
+  button:disabled { opacity: .4; cursor: default; background: #16213e; }
+  input[type="text"], input[type="date"] { background: #16213e; color: #e0e0e0; border: 1px solid #444; padding: 6px 10px; border-radius: 4px; font-size: 14px; }
+  .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .import-section { background: #16213e; border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+  .import-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: .78em; font-weight: bold; }
+  .progress-wrap { background: #0a0a1a; border-radius: 6px; height: 24px; margin: 8px 0; display: none; overflow: hidden; }
+  .progress-bar { background: #e94560; height: 100%; border-radius: 6px; transition: width 0.3s; display: flex; align-items: center; justify-content: center; font-size: .75em; }
+  #status { color: #888; font-size: .85em; margin-top: 4px; }
+  .empty-state { text-align: center; padding: 40px; color: #666; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📊 Loss Analysis — {{ username }}</h1>
+  <p class="subtitle">
+    <a href="/player/{{ username }}">← Player Profile</a> |
+    <a href="/">Puzzles</a>
+  </p>
+
+  <!-- Import & Controls -->
+  <div class="import-section">
+    <h2 style="margin-top:0">Import & Analyze</h2>
+    <div class="import-row">
+      <label style="color:#aaa;">Lichess:</label>
+      <input type="text" id="lichess-user" placeholder="Lichess username" style="width:160px">
+      <button onclick="importLichess()">Import from Lichess</button>
+    </div>
+    <div class="import-row">
+      <label style="color:#aaa;">Chess.com:</label>
+      <input type="text" id="chesscom-user" placeholder="Chess.com username" style="width:160px">
+      <button onclick="importChessCom()">Import from Chess.com</button>
+    </div>
+    <div class="controls" style="margin-top:12px;">
+      <label style="color:#aaa;">From:</label>
+      <input type="date" id="from-date">
+      <label style="color:#aaa;">To:</label>
+      <input type="date" id="to-date">
+      <button onclick="analyzeLosses()" id="analyze-btn">🔍 Analyze Losses</button>
+      <button onclick="analyzeLosses(true)" style="font-size:.8em;opacity:.7">Force Re-analyze</button>
+    </div>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar" id="progress-bar" style="width:0%">0%</div>
+    </div>
+    <div id="status"></div>
+  </div>
+
+  <!-- Stats Overview -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-box"><div class="stat-val" id="s-total">—</div><div class="stat-label">Games Analyzed</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-wins">—</div><div class="stat-label">Wins</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-losses">—</div><div class="stat-label">Losses</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-draws">—</div><div class="stat-label">Draws</div></div>
+    <div class="stat-box"><div class="stat-val" id="s-winrate">—</div><div class="stat-label">Win Rate</div></div>
+  </div>
+
+  <!-- Charts Row: Donut + Over Time -->
+  <div class="chart-row">
+    <div class="chart-half">
+      <div class="chart-wrap">
+        <h2 style="margin-top:0">How You Lose</h2>
+        <canvas id="donut-chart" height="280"></canvas>
+      </div>
+    </div>
+    <div class="chart-half">
+      <div class="chart-wrap">
+        <h2 style="margin-top:0">Loss Patterns Over Time</h2>
+        <canvas id="time-chart" height="280"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Accuracy Trend -->
+  <div class="chart-wrap">
+    <h2 style="margin-top:0">Accuracy Trend</h2>
+    <canvas id="accuracy-chart" height="200"></canvas>
+  </div>
+
+  <!-- Worst Blunders -->
+  <h2>Worst Blunders</h2>
+  <table id="blunders-table">
+    <thead><tr>
+      <th>Date</th><th>Opponent</th><th>Move #</th><th>Move</th><th>CP Loss</th><th>Eval Change</th><th>Category</th>
+    </tr></thead>
+    <tbody id="blunders-body"></tbody>
+  </table>
+
+  <!-- Opening Loss Patterns -->
+  <h2>Opening Loss Patterns</h2>
+  <table id="openings-table">
+    <thead><tr>
+      <th>Opening</th><th>Losses</th><th>Most Common Type</th><th>Avg Accuracy</th>
+    </tr></thead>
+    <tbody id="openings-body"></tbody>
+  </table>
+
+  <!-- Recent Losses -->
+  <h2>Recent Losses</h2>
+  <table id="losses-table">
+    <thead><tr>
+      <th>Date</th><th>Opponent</th><th>Category</th><th>Description</th><th>Accuracy</th>
+    </tr></thead>
+    <tbody id="losses-body"></tbody>
+  </table>
+  <div id="empty-state" class="empty-state" style="display:none;">
+    <p>No analysis data yet. Import games and click "Analyze Losses" to get started.</p>
+  </div>
+</div>
+
+<script>
+const USERNAME = "{{ username }}";
+const API = `/api/db/users/${USERNAME}`;
+
+const CATEGORY_COLORS = {
+  one_move_blunder: '#ff4444',
+  gradual_decline: '#ffaa00',
+  opening_disaster: '#ff6600',
+  endgame_collapse: '#aa44ff',
+  time_trouble: '#44aaff',
+  tactical_sequence: '#ff44aa',
+  never_had_a_chance: '#888888',
+};
+const CATEGORY_LABELS = {
+  one_move_blunder: 'One-Move Blunder',
+  gradual_decline: 'Gradual Decline',
+  opening_disaster: 'Opening Disaster',
+  endgame_collapse: 'Endgame Collapse',
+  time_trouble: 'Time Trouble',
+  tactical_sequence: 'Tactical Sequence',
+  never_had_a_chance: 'Never Had a Chance',
+};
+
+let donutChart, timeChart, accuracyChart;
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+async function importLichess() {
+  const user = document.getElementById('lichess-user').value.trim();
+  if (!user) { setStatus('Enter a Lichess username'); return; }
+  const fromDate = document.getElementById('from-date').value;
+  const toDate = document.getElementById('to-date').value;
+  setStatus('Importing from Lichess...');
+  try {
+    const r = await fetch(`${API}/import-lichess`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lichess_username: user, from_date: fromDate, to_date: toDate}),
+    });
+    const d = await r.json();
+    if (d.error) { setStatus('Error: ' + d.error); return; }
+    setStatus(`Imported ${d.imported} games from Lichess` + (d.errors ? ` (${d.errors} errors)` : ''));
+  } catch(e) { setStatus('Import failed: ' + e.message); }
+}
+
+async function importChessCom() {
+  const user = document.getElementById('chesscom-user').value.trim();
+  if (!user) { setStatus('Enter a Chess.com username'); return; }
+  const fromDate = document.getElementById('from-date').value;
+  const toDate = document.getElementById('to-date').value;
+  setStatus('Importing from Chess.com...');
+  try {
+    const r = await fetch(`${API}/import`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({chess_com_username: user, from_date: fromDate, to_date: toDate}),
+    });
+    const d = await r.json();
+    if (d.error) { setStatus('Error: ' + d.error); return; }
+    setStatus(`Imported ${d.imported} games from Chess.com`);
+  } catch(e) { setStatus('Import failed: ' + e.message); }
+}
+
+function analyzeLosses(force) {
+  const fromDate = document.getElementById('from-date').value;
+  const toDate = document.getElementById('to-date').value;
+  const btn = document.getElementById('analyze-btn');
+  const wrap = document.getElementById('progress-wrap');
+  const bar = document.getElementById('progress-bar');
+
+  btn.disabled = true;
+  wrap.style.display = 'block';
+  bar.style.width = '0%';
+  bar.textContent = '0%';
+  setStatus('Starting analysis...');
+
+  const body = JSON.stringify({from_date: fromDate, to_date: toDate, force: !!force});
+  const es = new EventSource(`${API}/analyze-losses?` + new URLSearchParams({
+    _body: body
+  }));
+
+  // EventSource only does GET, so use fetch with SSE parsing instead
+  fetch(`${API}/analyze-losses`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: body,
+  }).then(async response => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+          if (d.done) {
+            setStatus(`Analysis complete: ${d.analyzed} of ${d.total} games analyzed`);
+            wrap.style.display = 'none';
+            btn.disabled = false;
+            loadSummary();
+            return;
+          }
+          const pct = Math.round((d.game / d.total) * 100);
+          bar.style.width = pct + '%';
+          bar.textContent = `${d.game}/${d.total}`;
+          setStatus(`Analyzing ${d.current} (${d.game}/${d.total})...`);
+        } catch(e) {}
+      }
+    }
+    btn.disabled = false;
+    wrap.style.display = 'none';
+    loadSummary();
+  }).catch(e => {
+    setStatus('Analysis failed: ' + e.message);
+    btn.disabled = false;
+    wrap.style.display = 'none';
+  });
+}
+
+async function loadSummary() {
+  const fromDate = document.getElementById('from-date').value;
+  const toDate = document.getElementById('to-date').value;
+  const params = new URLSearchParams();
+  if (fromDate) params.set('from_date', fromDate);
+  if (toDate) params.set('to_date', toDate);
+
+  try {
+    const r = await fetch(`${API}/loss-summary?${params}`);
+    const data = await r.json();
+    if (data.error) { setStatus(data.error); return; }
+
+    if (data.total_games === 0) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+    document.getElementById('empty-state').style.display = 'none';
+
+    // Stats grid
+    document.getElementById('s-total').textContent = data.total_games;
+    document.getElementById('s-wins').textContent = data.wins;
+    document.getElementById('s-losses').textContent = data.losses;
+    document.getElementById('s-draws').textContent = data.draws;
+    const winRate = data.total_games > 0 ? Math.round(data.wins / data.total_games * 100) : 0;
+    document.getElementById('s-winrate').textContent = winRate + '%';
+
+    renderDonut(data.loss_category_distribution);
+    renderTimeline(data.loss_over_time);
+    renderAccuracy(data.accuracy_trend);
+    renderBlunders(data.worst_blunders);
+    renderOpenings(data.opening_losses);
+    renderRecentLosses(data);
+  } catch(e) { setStatus('Failed to load summary: ' + e.message); }
+}
+
+function renderDonut(dist) {
+  const categories = Object.keys(dist);
+  if (!categories.length) return;
+  const ctx = document.getElementById('donut-chart').getContext('2d');
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: categories.map(c => CATEGORY_LABELS[c] || c),
+      datasets: [{
+        data: categories.map(c => dist[c]),
+        backgroundColor: categories.map(c => CATEGORY_COLORS[c] || '#666'),
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#e0e0e0', padding: 12, font: {size: 11} } },
+      },
+      cutout: '55%',
+    },
+  });
+}
+
+function renderTimeline(data) {
+  if (!data.length) return;
+  const months = data.map(d => d.month);
+  const allCats = Object.keys(CATEGORY_COLORS);
+  const datasets = allCats.map(cat => ({
+    label: CATEGORY_LABELS[cat] || cat,
+    data: data.map(d => d[cat] || 0),
+    backgroundColor: CATEGORY_COLORS[cat],
+    borderWidth: 0,
+  })).filter(ds => ds.data.some(v => v > 0));
+
+  const ctx = document.getElementById('time-chart').getContext('2d');
+  if (timeChart) timeChart.destroy();
+  timeChart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: months, datasets },
+    options: {
+      responsive: true,
+      scales: {
+        x: { stacked: true, ticks: { color: '#888' }, grid: { color: '#222' } },
+        y: { stacked: true, ticks: { color: '#888', stepSize: 1 }, grid: { color: '#222' } },
+      },
+      plugins: { legend: { labels: { color: '#e0e0e0', font: {size: 10} } } },
+    },
+  });
+}
+
+function renderAccuracy(data) {
+  if (!data.length) return;
+  const labels = data.map(d => d.date);
+  const values = data.map(d => d.accuracy);
+  // Moving average (5-game window)
+  const ma = values.map((_, i) => {
+    const start = Math.max(0, i - 4);
+    const slice = values.slice(start, i + 1);
+    return Math.round(slice.reduce((a, b) => a + b, 0) / slice.length * 10) / 10;
+  });
+
+  const ctx = document.getElementById('accuracy-chart').getContext('2d');
+  if (accuracyChart) accuracyChart.destroy();
+  accuracyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Accuracy %', data: values, borderColor: '#4ecca3', backgroundColor: 'rgba(78,204,163,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+        { label: '5-Game Avg', data: ma, borderColor: '#e94560', borderDash: [5,5], pointRadius: 0, tension: 0.3 },
+      ],
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: { ticks: { color: '#888', maxTicksLimit: 20 }, grid: { color: '#222' } },
+        y: { min: 0, max: 100, ticks: { color: '#888' }, grid: { color: '#222' } },
+      },
+      plugins: { legend: { labels: { color: '#e0e0e0' } } },
+    },
+  });
+}
+
+function renderBlunders(blunders) {
+  const tbody = document.getElementById('blunders-body');
+  if (!blunders.length) { tbody.innerHTML = '<tr><td colspan="7" style="color:#666;text-align:center">No blunders found</td></tr>'; return; }
+  tbody.innerHTML = blunders.map(b => {
+    const cat = CATEGORY_LABELS[b.loss_category] || b.loss_category || '';
+    const color = CATEGORY_COLORS[b.loss_category] || '#666';
+    const opponent = b.white && b.black ? (b.white + ' vs ' + b.black) : '?';
+    return `<tr>
+      <td>${b.date || '?'}</td>
+      <td>${opponent}</td>
+      <td>${b.move_number || ''}</td>
+      <td style="font-weight:bold">${b.move_san || ''}</td>
+      <td style="color:#ff4444">${b.cp_loss || 0} cp</td>
+      <td>${(b.eval_before||0).toFixed(1)} → ${(b.eval_after||0).toFixed(1)}</td>
+      <td><span class="badge" style="background:${color}22;color:${color}">${cat}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderOpenings(openings) {
+  const tbody = document.getElementById('openings-body');
+  if (!openings.length) { tbody.innerHTML = '<tr><td colspan="4" style="color:#666;text-align:center">No opening data</td></tr>'; return; }
+  tbody.innerHTML = openings.map(o => {
+    const cat = CATEGORY_LABELS[o.top_category] || o.top_category || '';
+    const color = CATEGORY_COLORS[o.top_category] || '#666';
+    return `<tr>
+      <td>${o.opening_name || 'Unknown'}</td>
+      <td>${o.total_losses}</td>
+      <td><span class="badge" style="background:${color}22;color:${color}">${cat}</span></td>
+      <td>${o.avg_accuracy ? o.avg_accuracy.toFixed(1) + '%' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRecentLosses(data) {
+  // Use accuracy_trend + worst_blunders to build a recent losses view
+  // Actually, we need a dedicated endpoint. For now, reuse worst_blunders as a proxy.
+  const tbody = document.getElementById('losses-body');
+  const blunders = data.worst_blunders || [];
+  if (!blunders.length) { tbody.innerHTML = '<tr><td colspan="5" style="color:#666;text-align:center">No losses analyzed yet</td></tr>'; return; }
+  tbody.innerHTML = blunders.map(b => {
+    const cat = CATEGORY_LABELS[b.loss_category] || b.loss_category || '';
+    const color = CATEGORY_COLORS[b.loss_category] || '#666';
+    const opponent = b.white && b.black ? (b.white + ' vs ' + b.black) : '?';
+    return `<tr>
+      <td>${b.date || '?'}</td>
+      <td>${opponent}</td>
+      <td><span class="badge" style="background:${color}22;color:${color}">${cat}</span></td>
+      <td>Worst: ${b.move_san || '?'} on move ${b.move_number || '?'} (${b.cp_loss || 0}cp)</td>
+      <td>—</td>
+    </tr>`;
+  }).join('');
+}
+
+// Load on page load
+document.addEventListener('DOMContentLoaded', loadSummary);
+</script>
+</body>
+</html>
