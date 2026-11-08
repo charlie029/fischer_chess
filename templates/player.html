@@ -31,6 +31,8 @@
   button { padding: 8px 16px; border-radius: 6px; border: 1px solid #333; background: #16213e; color: #e0e0e0; font-size: 14px; cursor: pointer; }
   button:hover { background: #e94560; }
   button:disabled { opacity: .4; cursor: default; background: #16213e; }
+  .dex-filter { padding: 4px 10px; font-size: 12px; }
+  .dex-filter[aria-pressed="true"] { background: #e94560; border-color: #e94560; }
   #status { color: #888; font-size: .85em; margin-top: 8px; }
 </style>
 </head>
@@ -81,6 +83,24 @@
   <h2>Achievements</h2>
   <div id="badges-grid" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:24px;"></div>
 
+  <h2 id="pokedex">Pokédex</h2>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+    <span id="dex-summary" style="color:#e0e0e0;font-weight:bold;"></span>
+    <div style="flex:1;background:#333;border-radius:4px;height:8px;max-width:240px;">
+      <div id="dex-bar" style="width:0;background:#e94560;border-radius:4px;height:100%;transition:width .3s"></div>
+    </div>
+    <span role="group" aria-label="Pokédex filter" style="display:flex;gap:6px;">
+      <button class="dex-filter" data-f="all" aria-pressed="true">All</button>
+      <button class="dex-filter" data-f="caught" aria-pressed="false">Caught</button>
+      <button class="dex-filter" data-f="missing" aria-pressed="false">Missing</button>
+    </span>
+  </div>
+  <div style="color:#888;font-size:.75em;margin-bottom:10px;">
+    Every solved puzzle catches a Pokémon. Solve on the first try and solve harder tactics (forks, discovered attacks, checkmates) for better odds at
+    <span style="color:#5aa9ff">rare</span> and <span style="color:#ffd700">legendary</span> ones.
+  </div>
+  <div id="dex-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px;margin-bottom:24px;"></div>
+
   <h2>Worth a 2nd Look</h2>
   <div style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:8px;">
   <table id="puzzles-table">
@@ -120,7 +140,45 @@ async function loadAll() {
   renderPuzzles(puzzles);
   renderGames(games);
   renderBadges(badgeData);
+  loadPokedex();
 }
+
+const DEX_COLORS = {common:'#aaaaaa', uncommon:'#4ecca3', rare:'#5aa9ff', legendary:'#ffd700'};
+let dexData = null, dexFilter = 'all';
+
+async function loadPokedex() {
+  dexData = await fetch(`/api/db/users/${USER}/pokedex`).then(r => r.json());
+  renderPokedex();
+}
+
+function renderPokedex() {
+  if (!dexData || !dexData.entries) return;
+  document.getElementById('dex-summary').textContent =
+    `${dexData.unique} / ${dexData.total} caught · ${dexData.total_caught} total catches`;
+  document.getElementById('dex-bar').style.width = `${Math.round(dexData.unique / dexData.total * 100)}%`;
+  const rows = dexData.entries.filter(e =>
+    dexFilter === 'all' || (dexFilter === 'caught' ? e.count > 0 : e.count === 0));
+  document.getElementById('dex-grid').innerHTML = rows.map(e => {
+    const has = e.count > 0;
+    const num = '#' + String(e.id).padStart(3, '0');
+    const color = DEX_COLORS[e.rarity] || '#333';
+    const img = `<img src="${e.image}" alt="${has ? e.name : 'Unknown Pokémon'}" loading="lazy"
+      style="width:64px;height:64px;image-rendering:pixelated;${has ? '' : 'filter:brightness(0);opacity:.35;'}">`;
+    return `<div title="${has ? `${e.name} (${e.rarity}) ×${e.count}` : num + ' not caught yet'}"
+      style="position:relative;background:#16213e;border:2px solid ${has ? color : '#2a2a40'};border-radius:10px;padding:4px 2px;text-align:center;">
+      ${has && e.count > 1 ? `<span style="position:absolute;top:2px;right:4px;font-size:.65em;color:#e94560;font-weight:bold;">×${e.count}</span>` : ''}
+      <span style="position:absolute;top:2px;left:4px;font-size:.6em;color:#666;">${num}</span>
+      ${img}
+      <div style="font-size:.65em;color:${has ? '#e0e0e0' : '#555'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${has ? e.name : '???'}</div>
+    </div>`;
+  }).join('') || '<p style="color:#666">Nothing here yet.</p>';
+}
+
+document.querySelectorAll('.dex-filter').forEach(b => b.addEventListener('click', () => {
+  dexFilter = b.dataset.f;
+  document.querySelectorAll('.dex-filter').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  renderPokedex();
+}));
 
 function renderBadges(data) {
   const grid = document.getElementById('badges-grid');

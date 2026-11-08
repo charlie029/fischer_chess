@@ -90,6 +90,72 @@
   #profile-summary .ps-stats { color:#aaa; font-size:.85em; margin-top:6px; }
   #profile-summary .ps-tactics { margin-top:8px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
   #profile-summary .ps-tag { background:#333; color:#e94560; padding:2px 8px; border-radius:4px; font-size:.8em; }
+
+  /* ---- Catch + egg animations. Default styles are the END state, so with reduced
+     motion (animations off) the kid just sees the Pokémon and the text. ---- */
+  .anim-stage { position:relative; width:160px; height:130px; margin:0 auto 6px; }
+  .anim-stage .poke-reveal { position:absolute; left:50%; top:50%; width:110px; height:110px; margin:-55px 0 0 -55px;
+    image-rendering:pixelated; animation:poke-pop .45s cubic-bezier(.3,1.6,.5,1) both; }
+  .anim-stage.legendary .poke-reveal { filter:drop-shadow(0 0 14px #ffd700); }
+  .anim-stage.rare .poke-reveal { filter:drop-shadow(0 0 10px #5aa9ff); }
+  .anim-text { animation:text-in .4s ease-out both; }
+  .pokeball { position:absolute; left:50%; top:50%; width:68px; height:68px; margin:-34px 0 0 -34px; border-radius:50%;
+    border:3px solid #111; background:linear-gradient(#e94560 0 45%, #111 45% 55%, #f4f4f4 55%); opacity:0;
+    animation:ball-seq 2.2s ease-in-out both; }
+  .pokeball::after { content:''; position:absolute; left:50%; top:50%; width:18px; height:18px; margin:-12px 0 0 -12px;
+    border-radius:50%; background:#f4f4f4; border:3px solid #111; animation:ball-click 2.2s both; }
+  .egg { position:absolute; left:50%; top:50%; width:66px; height:84px; margin:-42px 0 0 -33px; opacity:0;
+    border:3px solid #111; border-radius:50% 50% 50% 50% / 60% 60% 40% 40%; transform-origin:50% 90%;
+    background:radial-gradient(circle at 30% 32%, #4ecca3 0 8px, transparent 9px),
+               radial-gradient(circle at 70% 52%, #4ecca3 0 7px, transparent 8px),
+               radial-gradient(circle at 42% 76%, #4ecca3 0 6px, transparent 7px), #fdf6e3;
+    animation:egg-seq 2.2s ease-in-out both; }
+  .egg.gold { background:radial-gradient(circle at 30% 32%, #ffd700 0 8px, transparent 9px),
+               radial-gradient(circle at 70% 52%, #ffd700 0 7px, transparent 8px),
+               radial-gradient(circle at 42% 76%, #ffd700 0 6px, transparent 7px), #fff4c2; }
+  .flash { position:absolute; left:50%; top:50%; width:60px; height:60px; margin:-30px 0 0 -30px; border-radius:50%;
+    background:#fff; opacity:0; animation:flash .5s ease-out both; }
+  .spark { position:absolute; left:50%; top:50%; width:10px; height:10px; margin:-5px; color:#ffd700; font-size:14px;
+    line-height:10px; opacity:0; animation:spark .7s ease-out both; }
+  .mini-egg { display:inline-block; width:14px; height:18px; vertical-align:-3px; border:2px solid #111;
+    border-radius:50% 50% 50% 50% / 60% 60% 40% 40%; transform-origin:50% 90%;
+    background:radial-gradient(circle at 35% 35%, #4ecca3 0 2px, transparent 3px), #fdf6e3;
+    animation:mini-wobble 1.2s ease-in-out 3; }
+  .mini-egg.gold { background:radial-gradient(circle at 35% 35%, #ffd700 0 2px, transparent 3px), #fff4c2; }
+
+  @keyframes ball-seq {
+    0% { opacity:1; transform:translateY(-170px) rotate(0); }
+    20% { opacity:1; transform:translateY(0); }
+    25% { transform:translateY(-16px); }
+    30% { transform:translateY(0) rotate(0); }
+    38% { transform:rotate(-22deg); } 46% { transform:rotate(18deg); } 52% { transform:rotate(0); }
+    60% { transform:rotate(-16deg); } 66% { transform:rotate(12deg); } 72% { transform:rotate(0); }
+    78% { transform:rotate(-9deg); } 84% { opacity:1; transform:rotate(0) scale(1); }
+    92% { opacity:1; transform:scale(1.15); }
+    100% { opacity:0; transform:scale(.2); }
+  }
+  @keyframes ball-click { 0%, 84% { background:#f4f4f4; } 86%, 92% { background:#ffd700; box-shadow:0 0 12px #ffd700; } 100% { background:#f4f4f4; } }
+  @keyframes egg-seq {
+    0% { opacity:0; transform:scale(.6); } 8% { opacity:1; transform:scale(1); }
+    20% { transform:rotate(-6deg); } 28% { transform:rotate(6deg); } 34% { transform:rotate(0); }
+    44% { transform:rotate(-10deg); } 52% { transform:rotate(10deg); } 58% { transform:rotate(0); }
+    66% { transform:rotate(-15deg); } 72% { transform:rotate(15deg); } 78% { transform:rotate(-15deg); }
+    84% { opacity:1; transform:rotate(0) scale(1); }
+    100% { opacity:0; transform:scale(1.5); }
+  }
+  @keyframes poke-pop { from { opacity:0; transform:scale(0); } to { opacity:1; transform:scale(1); } }
+  @keyframes text-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  /* 0% is invisible so the delayed "both" fill doesn't show a dot before the effect starts. */
+  @keyframes flash { 0% { opacity:0; transform:scale(.2); } 1% { opacity:.95; transform:scale(.2); }
+                     100% { opacity:0; transform:scale(3.5); } }
+  @keyframes spark { 0% { opacity:0; transform:rotate(var(--a)) translateX(0) scale(.4); }
+                     1% { opacity:1; transform:rotate(var(--a)) translateX(0) scale(.4); }
+                     100% { opacity:0; transform:rotate(var(--a)) translateX(70px) scale(1.2); } }
+  @keyframes mini-wobble { 0%,100% { transform:rotate(0); } 25% { transform:rotate(-14deg); } 75% { transform:rotate(14deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .anim-stage *, .anim-text, .mini-egg { animation:none !important; }
+  }
 </style>
 </head>
 <body>
@@ -99,6 +165,7 @@
     <div id="user-logged-in" style="display:none;">
       <span style="color:#4ecca3;font-weight:bold;font-size:1.1em;">👤 <span id="current-user-name"></span></span>
       <span id="streak-display" style="margin-left:16px;font-size:.95em;"></span>
+      <div id="egg-widget" role="status" style="margin-top:6px;font-size:.85em;color:#ccc;"></div>
       <a href="#" id="user-profile-link" style="margin-left:12px;color:#8bb4f0;">My Profile</a>
       <button id="sign-off-btn" style="margin-left:12px;background:#333;padding:4px 12px;font-size:.85em;">Sign Off</button>
     </div>
@@ -380,8 +447,10 @@ async function loadUserPuzzles() {
     if (p.daily_streak) parts.push(`🔥${p.daily_streak}d`);
     if (p.first_try_streak) parts.push(`⚡${p.first_try_streak}`);
     parts.push(`📊${p.volume||0} solved`);
+    parts.push(`<a href="/player/${activeProfile}#pokedex" style="color:inherit" title="Pokédex">🔴${p.pokedex||0}/151</a>`);
     document.getElementById('streak-display').innerHTML = parts.join(' <span style="color:#555">|</span> ');
   });
+  loadEggStatus();
 }
 
 async function setPuzzleStatus(puzzleId, status) {
@@ -390,11 +459,105 @@ async function setPuzzleStatus(puzzleId, status) {
     body: JSON.stringify({status})
   });
   const data = await resp.json();
+  if (data.caught) showCatchNotification(data.caught);
+  if (data.egg) { showEggNotification(data.egg); loadEggStatus(); }
   if (data.new_badges && data.new_badges.length) {
     data.new_badges.forEach(b => {
       showBadgeNotification(b);
     });
   }
+}
+
+// Header widget: today's egg (waiting to hatch, or what hatched) and the egg streak.
+async function loadEggStatus() {
+  if (!activeProfile) return;
+  const el = document.getElementById('egg-widget');
+  try {
+    const e = await fetch(`/api/db/users/${activeProfile}/daily-egg`).then(r => r.json());
+    if (e.error) { el.innerHTML = ''; return; }
+    if (e.hatched) {
+      const next = e.days_to_guarantee === 0 ? 'tomorrow is a guaranteed rare!' : `come back tomorrow for day ${e.streak + 1}`;
+      el.innerHTML = `<img src="${e.hatched.image}" alt="" style="width:28px;height:28px;vertical-align:middle;image-rendering:pixelated;">
+        Today's egg: <strong>${e.hatched.name}</strong> · 🔥 day ${e.streak} · ${next}`;
+    } else {
+      const extra = e.guaranteed_today ? ' <strong style="color:#ffd700">Guaranteed rare today!</strong>'
+        : ` · ${e.days_to_guarantee} more day${e.days_to_guarantee === 1 ? '' : 's'} to a guaranteed rare`;
+      el.innerHTML = `<span class="mini-egg${e.guaranteed_today ? ' gold' : ''}" aria-hidden="true"></span>
+        Solve 1 puzzle to hatch today's egg · day ${e.streak}${extra}`;
+    }
+  } catch (err) { el.innerHTML = ''; }
+}
+
+function sparkles(delaySec, color) {
+  let s = '';
+  for (let i = 0; i < 10; i++) {
+    s += `<span class="spark" style="--a:${i * 36}deg;animation-delay:${delaySec}s;color:${color}">✦</span>`;
+  }
+  return s;
+}
+
+// Popups (catches and badges) show one at a time instead of stacking on top of each other.
+const popupQueue = [];
+let popupShowing = false;
+function queuePopup(html, borderColor, ms) {
+  popupQueue.push({html, borderColor, ms});
+  if (!popupShowing) nextPopup();
+}
+function nextPopup() {
+  const item = popupQueue.shift();
+  if (!item) { popupShowing = false; return; }
+  popupShowing = true;
+  const div = document.createElement('div');
+  div.setAttribute('role', 'status');
+  div.style.cssText = `position:fixed;top:20%;left:50%;transform:translateX(-50%);background:#16213e;border:2px solid ${item.borderColor};border-radius:16px;padding:24px 32px;z-index:9999;text-align:center;animation:fadeIn .3s;cursor:pointer`;
+  div.innerHTML = item.html;
+  const done = () => { if (div.parentNode) { div.remove(); nextPopup(); } };
+  div.onclick = done;
+  document.body.appendChild(div);
+  setTimeout(done, item.ms);
+}
+
+const RARITY_COLORS = {common:'#aaaaaa', uncommon:'#4ecca3', rare:'#5aa9ff', legendary:'#ffd700'};
+function rarityLine(c, color) {
+  return `<span style="color:${color};font-size:.85em;text-transform:uppercase;letter-spacing:1px;">${c.rarity}</span>
+    ${c.new ? '<span style="background:#e94560;color:#fff;border-radius:4px;padding:1px 6px;font-size:.75em;margin-left:6px;">NEW</span>' : ''}`;
+}
+
+// Poké Ball drops in, shakes 3 times, clicks, then the Pokémon pops out (about 2.5s).
+function showCatchNotification(c) {
+  const color = RARITY_COLORS[c.rarity] || '#4ecca3';
+  const ms = c.rarity === 'legendary' ? 6500 : c.rarity === 'rare' ? 5500 : 4800;
+  queuePopup(`<div class="anim-stage ${c.rarity}">
+      <div class="pokeball"></div>
+      <div class="flash" style="animation-delay:2.05s"></div>
+      ${sparkles(2.05, color)}
+      <img class="poke-reveal" src="${c.image}" alt="${c.name}" style="animation-delay:2.1s">
+    </div>
+    <div class="anim-text" style="animation-delay:2.2s">
+      <strong style="color:${color};font-size:1.25em;">${c.rarity === 'legendary' ? '🌟 LEGENDARY! ' : ''}Gotcha! You caught ${c.name}!</strong><br>
+      ${rarityLine(c, color)}
+      <br><span style="color:#888;font-size:.8em;">#${String(c.id).padStart(3,'0')} · added to your Pokédex</span>
+    </div>`, color, ms);
+}
+
+// Daily egg wobbles harder and harder, flashes, then hatches (about 2.5s).
+function showEggNotification(e) {
+  const color = RARITY_COLORS[e.rarity] || '#4ecca3';
+  const ms = e.rarity === 'legendary' ? 7000 : 6000;
+  const next = (e.streak + 1) % 7 === 0 ? 'Tomorrow is a guaranteed rare egg!' : `Come back tomorrow for day ${e.streak + 1}!`;
+  queuePopup(`<div class="anim-stage ${e.rarity}">
+      <div class="egg${e.guaranteed ? ' gold' : ''}"></div>
+      <div class="flash" style="animation-delay:1.85s"></div>
+      ${sparkles(1.9, color)}
+      <img class="poke-reveal" src="${e.image}" alt="${e.name}" style="animation-delay:1.95s">
+    </div>
+    <div class="anim-text" style="animation-delay:2.1s">
+      <strong style="color:#e0e0e0;font-size:1.05em;">🥚 Your daily egg hatched!</strong><br>
+      <strong style="color:${color};font-size:1.25em;">${e.rarity === 'legendary' ? '🌟 LEGENDARY! ' : ''}It's ${e.name}!</strong><br>
+      ${rarityLine(e, color)}
+      <br><span style="color:#ffb347;font-size:.9em;">🔥 Day ${e.streak} egg streak${e.guaranteed ? ' · guaranteed rare day!' : ''}</span>
+      <br><span style="color:#888;font-size:.8em;">${next}</span>
+    </div>`, color, ms);
 }
 
 // Keep the in-memory queue (and the counter total) in sync with a solve.
@@ -429,11 +592,10 @@ function markSolvedInQueue(p, status) {
 }
 
 function showBadgeNotification(badge) {
-  const div = document.createElement('div');
-  div.style.cssText = 'position:fixed;top:20%;left:50%;transform:translateX(-50%);background:#16213e;border:2px solid #4ecca3;border-radius:16px;padding:24px 32px;z-index:9999;text-align:center;animation:fadeIn .3s';
-  div.innerHTML = `<img src="${badge.image}" style="width:80px;height:80px;image-rendering:pixelated;"><br><strong style="color:#4ecca3;font-size:1.2em;">Badge Earned!</strong><br><span style="color:#e0e0e0;font-size:1.1em;">${badge.name}</span><br><span style="color:#888;font-size:.85em;">${badge.type.replace('_',' ')}</span>`;
-  document.body.appendChild(div);
-  setTimeout(() => div.remove(), 3000);
+  const isEmoji = badge.image && badge.image.length <= 4;
+  const img = isEmoji ? `<div style="font-size:64px;line-height:80px;">${badge.image}</div>`
+    : `<img src="${badge.image}" alt="${badge.name}" style="width:80px;height:80px;image-rendering:pixelated;">`;
+  queuePopup(`${img}<br><strong style="color:#4ecca3;font-size:1.2em;">Badge Earned!</strong><br><span style="color:#e0e0e0;font-size:1.1em;">${badge.name}</span><br><span style="color:#888;font-size:.85em;">${badge.type.replace(/_/g,' ')}</span>`, '#4ecca3', 3000);
 }
 
 async function archivePuzzle() {

@@ -1,4 +1,4 @@
-"""Badge system for Fischer Chess — Pokémon, Soccer, Premier League, Gems achievements."""
+"""Badge system for Fischer Chess — Pokémon, Soccer, Premier League, Gems, tactic and Pokédex achievements."""
 
 from datetime import date, timedelta
 
@@ -108,7 +108,72 @@ BADGE_CONFIG = {
             (5, 20, "Red", "/static/badges/red.png"),
         ],
     },
+    "pokedex": {
+        "label": "Pokédex",
+        "desc": "Catch different Pokémon by solving puzzles",
+        "mystery_from": 5,
+        "tiers": [
+            (1, 10, "Poké Ball", "/static/badges/poke-ball.png"),
+            (2, 30, "Great Ball", "/static/badges/great-ball.png"),
+            (3, 60, "Ultra Ball", "/static/badges/ultra-ball.png"),
+            (4, 100, "Master Ball", "/static/badges/master-ball.png"),
+            (5, 151, "Pokémon Master", "🏆"),
+        ],
+    },
 }
+
+
+def _poke(n):
+    return f"/static/pokedex/{n}.png"
+
+
+# Tactic badges: solve puzzles of a tactic type to evolve a Pokémon line.
+# badge_type -> (label, desc, tactic labels that count, [(threshold, name, dex number)])
+TACTIC_BADGES = {
+    "tactic_fork": ("Fork Master", "Solve fork puzzles", {"fork"},
+                    [(3, "Abra", 63), (10, "Kadabra", 64), (25, "Alakazam", 65)]),
+    "tactic_pin": ("Pin Master", "Solve pin puzzles", {"pin"},
+                   [(3, "Caterpie", 10), (10, "Metapod", 11), (25, "Butterfree", 12)]),
+    "tactic_skewer": ("Skewer Master", "Solve skewer puzzles", {"skewer"},
+                      [(3, "Weedle", 13), (10, "Kakuna", 14), (25, "Beedrill", 15)]),
+    "tactic_discovered": ("Sneak Attack", "Solve discovered attack puzzles",
+                          {"discovered attack", "discovered check"},
+                          [(3, "Gastly", 92), (10, "Haunter", 93), (25, "Gengar", 94)]),
+    "tactic_mate": ("Checkmate Hunter", "Solve checkmate puzzles",
+                    {"checkmate", "back rank mate", "smothered mate"},
+                    [(3, "Dratini", 147), (10, "Dragonair", 148), (25, "Dragonite", 149)]),
+    "tactic_check": ("Check Power", "Solve puzzles that start with a check", {"check"},
+                     [(3, "Machop", 66), (10, "Machoke", 67), (25, "Machamp", 68)]),
+    "tactic_capture": ("Capture Crew", "Solve capture puzzles", {"capture"},
+                       [(3, "Bulbasaur", 1), (10, "Ivysaur", 2), (25, "Venusaur", 3)]),
+    "tactic_trap": ("Piece Trapper", "Solve trapped-piece puzzles", {"trapped piece"},
+                    [(3, "Squirtle", 7), (10, "Wartortle", 8), (25, "Blastoise", 9)]),
+    "tactic_promotion": ("Promotion Power", "Solve pawn promotion puzzles", {"promotion"},
+                         [(1, "Magikarp", 129), (5, "Gyarados", 130)]),
+    "tactic_positional": ("Smart Mover", "Solve quiet positional puzzles", {"positional"},
+                          [(3, "Pidgey", 16), (10, "Pidgeotto", 17), (25, "Pidgeot", 18)]),
+}
+
+for _type, (_label, _desc, _tags, _steps) in TACTIC_BADGES.items():
+    BADGE_CONFIG[_type] = {
+        "label": _label,
+        "desc": _desc,
+        "mystery_from": 3,
+        "tiers": [(i + 1, t, name, _poke(n)) for i, (t, name, n) in enumerate(_steps)],
+    }
+
+
+def _tactic_counts(conn, user_id):
+    """Count solved puzzles per tactic badge type (a puzzle can count toward several)."""
+    counts = {k: 0 for k in TACTIC_BADGES}
+    for (tactics,) in conn.execute(
+            "SELECT tactics FROM puzzles WHERE user_id = ? AND status IN ('solved_first_try','solved_retry')",
+            (user_id,)):
+        tags = {t.strip() for t in (tactics or "").split(",") if t.strip()}
+        for k, (_l, _d, wanted, _s) in TACTIC_BADGES.items():
+            if tags & wanted:
+                counts[k] += 1
+    return counts
 
 # Flat format for API compatibility
 BADGES = {k: v["tiers"] for k, v in BADGE_CONFIG.items()}
@@ -197,6 +262,19 @@ def check_badges(conn, user_id):
         if crushed_count >= threshold:
             award("game_crusher", tier, name, img)
 
+    # --- Tactic evolution lines ---
+    for badge_type, count in _tactic_counts(conn, user_id).items():
+        for tier, threshold, name, img in BADGES[badge_type]:
+            if count >= threshold:
+                award(badge_type, tier, name, img)
+
+    # --- Pokédex: unique Pokémon caught ---
+    from pokedex import unique_caught
+    caught = unique_caught(conn, user_id)
+    for tier, threshold, name, img in BADGES["pokedex"]:
+        if caught >= threshold:
+            award("pokedex", tier, name, img)
+
     if newly_earned:
         conn.commit()
     return newly_earned
@@ -268,7 +346,11 @@ def get_progress(conn, user_id):
         AND COUNT(*) > 0
     """, (user_id,)).fetchall()
 
+    from pokedex import unique_caught
+
     return {
+        **_tactic_counts(conn, user_id),
+        "pokedex": unique_caught(conn, user_id),
         "volume": total_solved,
         "first_try_streak": first_try_streak,
         "daily_streak": daily_streak,

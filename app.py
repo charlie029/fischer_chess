@@ -563,8 +563,35 @@ def api_db_update_puzzle_status(puzzle_id):
     status = data.get("status")
     if status not in ("active", "solved_first_try", "solved_retry", "archived", "bookmarked"):
         return jsonify({"error": "Invalid status"}), 400
-    new_badges = db.update_puzzle_status(puzzle_id, status)
-    return jsonify({"ok": True, "new_badges": new_badges or []})
+    result = db.update_puzzle_status(puzzle_id, status)
+    return jsonify({"ok": True, "new_badges": result["new_badges"] or [], "caught": result["caught"],
+                    "egg": result["egg"]})
+
+
+@app.route("/api/db/users/<username>/daily-egg", methods=["GET"])
+def api_db_user_daily_egg(username):
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    from pokedex import egg_status
+    conn = db.get_db()
+    try:
+        return jsonify(egg_status(conn, user["id"]))
+    finally:
+        conn.close()
+
+
+@app.route("/api/db/users/<username>/pokedex", methods=["GET"])
+def api_db_user_pokedex(username):
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    from pokedex import get_pokedex
+    conn = db.get_db()
+    try:
+        return jsonify(get_pokedex(conn, user["id"]))
+    finally:
+        conn.close()
 
 
 @app.route("/api/db/users/<username>/badges", methods=["GET"])

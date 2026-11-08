@@ -85,6 +85,30 @@ def init_db():
         UNIQUE(user_id, badge_type, tier)
     )""")
 
+    # Pokédex catches: one Pokémon per solved puzzle. puzzle_id has no FK on purpose, so
+    # deleting a game or puzzle never takes away a Pokémon the kid already caught.
+    conn.execute("""CREATE TABLE IF NOT EXISTS pokedex_catches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        pokemon_id INTEGER NOT NULL,
+        puzzle_id INTEGER,
+        caught_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        UNIQUE(user_id, puzzle_id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_pokedex_user ON pokedex_catches(user_id)")
+
+    # Daily egg: one per user per local day (YYYY-MM-DD), hatched by the day's first solve.
+    conn.execute("""CREATE TABLE IF NOT EXISTS daily_eggs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        day TEXT NOT NULL,
+        pokemon_id INTEGER NOT NULL,
+        hatched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        UNIQUE(user_id, day)
+    )""")
+
     # Migration: add lichess_username to users table
     user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
     if "lichess_username" not in user_cols:
@@ -166,6 +190,8 @@ def delete_user(username):
         conn.execute("DELETE FROM puzzles WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM games WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM badges WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM pokedex_catches WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM daily_eggs WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
         conn.commit()
         return True
@@ -283,7 +309,13 @@ def get_queue_puzzles(user_id):
 
 
 def update_puzzle_status(puzzle_id, status):
+    """Update a puzzle's status. On a solve, catch a Pokémon and check badges.
+
+    Returns {"new_badges": [...], "caught": {...} or None, "egg": {...} or None}.
+    The day's first solve also hatches the daily egg.
+    """
     from badges import check_badges
+    from pokedex import catch_for_puzzle, hatch_daily_egg
     conn = get_db()
     try:
         if status in ("solved_first_try", "solved_retry"):
@@ -292,13 +324,17 @@ def update_puzzle_status(puzzle_id, status):
         else:
             conn.execute("UPDATE puzzles SET status = ? WHERE id = ?", (status, puzzle_id))
         conn.commit()
-        # Check badges after a solve
+        result = {"new_badges": [], "caught": None, "egg": None}
         if status in ("solved_first_try", "solved_retry"):
             row = conn.execute("SELECT user_id FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
             if row:
-                newly_earned = check_badges(conn, row[0])
-                return newly_earned
-        return []
+                # Catch first so a new Pokédex milestone badge is awarded on this same solve.
+                result["caught"] = catch_for_puzzle(conn, row[0], puzzle_id,
+                                                    status == "solved_first_try")
+                result["egg"] = hatch_daily_egg(conn, row[0])
+                conn.commit()
+                result["new_badges"] = check_badges(conn, row[0])
+        return result
     finally:
         conn.close()
 
