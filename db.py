@@ -201,6 +201,20 @@ def get_user_puzzles(user_id, limit=None):
         conn.close()
 
 
+def get_games_by_ids(user_id, game_ids):
+    """Fetch specific games owned by user_id (used to analyze only newly imported games)."""
+    ids = [int(i) for i in game_ids]
+    if not ids:
+        return []
+    conn = get_db()
+    try:
+        placeholders = ",".join("?" * len(ids))
+        q = f"SELECT * FROM games WHERE user_id = ? AND id IN ({placeholders}) ORDER BY date DESC"
+        return conn.execute(q, (user_id, *ids)).fetchall()
+    finally:
+        conn.close()
+
+
 def get_queue_puzzles(user_id):
     """Get puzzles for the main page queue: active first, then solved_retry, then bookmarked."""
     conn = get_db()

@@ -467,6 +467,7 @@ def api_db_import_games(username):
     archives = r.json().get("archives", [])
 
     imported = 0
+    new_ids = []
     for url in archives:
         r = req.get(url, headers=headers)
         if r.status_code != 200:
@@ -494,8 +495,9 @@ def api_db_import_games(username):
             )
             if game_id:
                 imported += 1
+                new_ids.append(game_id)
 
-    return jsonify({"imported": imported, "username": username})
+    return jsonify({"imported": imported, "game_ids": new_ids, "username": username})
 
 
 @app.route("/api/db/users/<username>/import-pgn", methods=["POST"])
@@ -511,6 +513,7 @@ def api_db_import_pgn(username):
     pgn_text_all = file.read().decode("utf-8", errors="ignore")
     stream = io.StringIO(pgn_text_all)
     imported = 0
+    new_ids = []
     while True:
         g = chess.pgn.read_game(stream)
         if g is None:
@@ -525,7 +528,8 @@ def api_db_import_pgn(username):
         )
         if game_id:
             imported += 1
-    return jsonify({"imported": imported, "username": username})
+            new_ids.append(game_id)
+    return jsonify({"imported": imported, "game_ids": new_ids, "username": username})
 
 
 @app.route("/api/db/users/<username>/puzzles", methods=["GET"])
@@ -589,7 +593,13 @@ def api_db_generate_puzzles(username):
     limit = data.get("limit", 50)  # max games to analyze
     player_name = data.get("player_name", "").strip()  # name as it appears in PGN headers
 
-    games = db.get_user_games(user["id"], limit)
+    game_ids = data.get("game_ids")  # optional: analyze only these (e.g. just-imported) games
+    if game_ids is not None:
+        if not game_ids:
+            return jsonify({"puzzles_generated": 0, "games_analyzed": 0})
+        games = db.get_games_by_ids(user["id"], game_ids)
+    else:
+        games = db.get_user_games(user["id"], limit)
     if not games:
         return jsonify({"error": "No games found"}), 404
 

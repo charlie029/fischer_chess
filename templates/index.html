@@ -887,7 +887,7 @@ document.getElementById('cc-submit').addEventListener('click', async () => {
   document.getElementById('import-chesscom-btn').textContent = `Analyzing ${d.imported} games...`;
   const r2 = await fetch(`/api/db/users/${activeProfile}/generate-puzzles`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({limit:50, depth:12, player_name: chessUser || ''})
+    body: JSON.stringify({game_ids: d.game_ids || [], depth:12, player_name: chessUser || ''})
   });
   const d2 = await r2.json();
   document.getElementById('import-chesscom-btn').disabled = false;
@@ -920,7 +920,7 @@ document.getElementById('pgn-file-input').addEventListener('change', async (e) =
   document.getElementById('import-local-btn').textContent = `Analyzing ${d.imported} games...`;
   const r2 = await fetch(`/api/db/users/${activeProfile}/generate-puzzles`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({limit:50, depth:12, player_name: playerName})
+    body: JSON.stringify({game_ids: d.game_ids || [], depth:12, player_name: playerName})
   });
   const d2 = await r2.json();
   document.getElementById('import-local-btn').disabled = false;
