@@ -25,6 +25,19 @@
   #feedback.correct { color: #4ecca3; }
   #feedback.wrong { color: #e94560; }
   #feedback.info { color: #f0c040; }
+  #cand-list { margin: 0; padding-left: 22px; }
+  #cand-list li { padding: 3px 0; }
+  #cand-list .cand-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #cand-list .cand-why { font-size: .8em; color: #bbb; margin: 2px 0 4px; line-height: 1.5; }
+  #cand-list .cand-why .cand-line { font-family: monospace; color: #8bb4f0; }
+  #cand-list .cand-san { font-weight: bold; min-width: 56px; }
+  #cand-list button { padding: 2px 8px; font-size: 12px; }
+  #cand-list .cand-x { background: none; border: 1px solid #555; color: #aaa; }
+  .cand-verdict { font-size: .85em; }
+  .cand-verdict.good { color: #4ecca3; }
+  .cand-verdict.ok { color: #f0c040; }
+  .cand-verdict.bad { color: #e94560; }
+  .cand-verdict.pending { color: #888; }
   .turn-badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: .85em; }
   .turn-badge.white { background: #fff; color: #111; }
   .turn-badge.black { background: #333; color: #fff; }
@@ -229,6 +242,7 @@
     <span class="counter" id="counter"><input id="counter-input" type="number" min="1" value="0"> / <span id="counter-total">0</span></span>
     <button id="next-btn" disabled>Next →</button>
     <button id="hint-btn" disabled>Hint</button>
+    <button id="cand-btn" aria-pressed="false" title="Kotov method: list candidate moves before you play">📝 Candidates</button>
     <button id="archive-btn" style="background:#2a1a1a;border-color:#e94560">Skip</button>
     <button id="bookmark-btn" style="background:#0f3460" title="Save to Worth a 2nd Look">★</button>
     <button id="engine-btn">Engine</button>
@@ -280,6 +294,17 @@
     </div>
     <div class="info-panel">
       <div id="feedback" class="info">Select a PGN file to start</div>
+      <div id="think-meter" style="display:none;margin:0 12px 10px;" role="status" aria-live="off">
+        <div style="background:#16213e;border-radius:4px;height:6px;overflow:hidden;">
+          <div class="tm-fill" style="height:100%;width:0;transition:width .25s,background .25s;"></div>
+        </div>
+        <div class="tm-label" style="text-align:center;font-size:.85em;color:#aaa;margin-top:4px;"></div>
+      </div>
+      <div id="cand-panel" class="card" style="display:none">
+        <h3>Candidate Moves</h3>
+        <p id="cand-hint" style="color:#aaa;font-size:.85em;margin:0 0 8px;"></p>
+        <ol id="cand-list" aria-live="polite"></ol>
+      </div>
       <div class="card" id="game-card" style="display:none">
         <h3>Game Info</h3>
         <p><span class="label">Event:</span> <span id="info-event"></span></p>
@@ -342,6 +367,9 @@
 <script>
 let puzzles = [], idx = 0, game = null, solved = false;
 let moveHistory = [], redoStack = [];
+// The puzzle on the board. Not always puzzles[idx]: a solve removes it from the queue
+// (markSolvedInQueue), so post-solve exploration must use this instead.
+let current = null;
 
 const board = Chessboard('board', {
   draggable: true,
@@ -362,55 +390,60 @@ function onDrop(src, tgt) {
   }
   const move = game.move({ from: src, to: tgt, promotion: 'q' });
   if (!move) return 'snapback';
-  const p = puzzles[idx];
-  const uci = move.from + move.to;
-  const uciQ = uci + 'q';
-  if (uci === p.solution_uci || uciQ === p.solution_uci) {
-    solved = true;
-    moveHistory = [game.history().pop() || p.solution_san]; redoStack = [];
-    document.getElementById('explore-controls').style.display = 'flex';
-    showFeedback('✓ Correct! ' + p.solution_san, 'correct');
-    if (p.status !== 'bookmarked') {
-      if (attempts === 0) {
-        setPuzzleStatus(p.id, 'solved_first_try');
-        markSolvedInQueue(p, 'solved_first_try');
-        showFeedback('✓ Correct! (archived)', 'correct');
-      } else {
-        setPuzzleStatus(p.id, 'solved_retry');
-        markSolvedInQueue(p, 'solved_retry');
-      }
-    }
-  } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
-    solved = true;
-    moveHistory = [game.history().pop() || move.san]; redoStack = [];
-    document.getElementById('explore-controls').style.display = 'flex';
-    showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
-    if (p.status !== 'bookmarked') {
-      if (attempts === 0) {
-        setPuzzleStatus(p.id, 'solved_first_try');
-        markSolvedInQueue(p, 'solved_first_try');
-      } else {
-        setPuzzleStatus(p.id, 'solved_retry');
-        markSolvedInQueue(p, 'solved_retry');
-      }
-    }
-  } else {
-    attempts++;
+  if (candidateMode) {
+    // Kotov: listing a candidate doesn't play it.
     game.undo();
-    if (attempts >= 3) {
-      showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
-      setPuzzleStatus(p.id, 'bookmarked');
-      p.status = 'bookmarked';
-      // Move to end of queue and advance
-      puzzles.splice(idx, 1);
-      puzzles.push(p);
-      if (idx >= puzzles.length) idx = 0;
-      setTimeout(() => { attempts = 0; loadPuzzle(); }, 1200);
-      return;
-    }
-    showFeedback('✗ Try again', 'wrong');
+    addCandidate(move);
     return 'snapback';
   }
+  return judgeMove(move) ? undefined : 'snapback';
+}
+
+const moveUci = m => m.from + m.to + (m.promotion || '');
+
+// Score a move already made on `game`. Returns true if it solved the puzzle;
+// on a wrong move it is undone from `game` (the caller resyncs the board).
+function judgeMove(move) {
+  const p = puzzles[idx];
+  const uci = move.from + move.to, uciQ = uci + 'q';
+  const best = uci === p.solution_uci || uciQ === p.solution_uci;
+  const ok = !best && (p.acceptable_uci || []).some(a => a === uci || a === uciQ);
+  if (best || ok) {
+    solved = true;
+    const info = { ...takeAttempt(true), ...candidatePayload(move) };
+    moveHistory = [move.san]; redoStack = [];
+    document.getElementById('explore-controls').style.display = 'flex';
+    const msg = best ? '✓ Correct! ' + p.solution_san : '✓ Acceptable! Best was ' + p.solution_san;
+    showFeedback(msg + (best && attempts === 0 && p.status !== 'bookmarked' ? ' (archived)' : ''),
+                 best ? 'correct' : 'info');
+    chatMsg(msg, 'ok');
+    recordSolve(p, info);
+    showGameMove(p);
+    reviewCandidates(p);
+    if (engineOn) setTimeout(startAnalysis, 0);  // engine unlocks now
+    return true;
+  }
+  postAttempt(p.id, { ...takeAttempt(false), ...candidatePayload(move) });
+  markCandidateTried(move);
+  if (p.played && move.san === p.played) chatMsg('That\'s the move you played in the game. Look again: what does your opponent do next?', 'sys');
+  explainWrong(p, move);
+  attempts++;
+  game.undo();
+  if (attempts >= 3) {
+    showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
+    chatMsg('Too tough! Saved to Worth a 2nd Look.', 'sys');
+    setPuzzleStatus(p.id, 'bookmarked');
+    p.status = 'bookmarked';
+    // Move to end of queue and advance
+    puzzles.splice(idx, 1);
+    puzzles.push(p);
+    if (idx >= puzzles.length) idx = 0;
+    setTimeout(() => { attempts = 0; loadPuzzle(); }, 1200);
+    return false;
+  }
+  showFeedback('✗ Try again', 'wrong');
+  chatMsg('Incorrect, try again.', 'err');
+  return false;
 }
 
 function onSnapEnd() { board.position(game.fen()); }
@@ -439,6 +472,7 @@ function chatMsg(text, cls) {
 
 function loadPuzzle() {
   const p = puzzles[idx];
+  current = p;
   game = new Chess(p.fen);
   const orient = p.turn === 'black' ? 'black' : 'white';
   board.orientation(orient);
@@ -448,6 +482,9 @@ function loadPuzzle() {
   moveHistory = []; redoStack = [];
   document.getElementById('explore-controls').style.display = 'none';
   showFeedback('Find the best move for ' + p.turn, 'info');
+  startThinkTimer();
+  puzzleToken++;  // late engine explanations from the previous puzzle are dropped
+  resetCandidates();
   document.getElementById('counter-input').value = idx + 1;
   document.getElementById('counter-input').max = puzzles.length;
   document.getElementById('counter-total').textContent = puzzles.length;
@@ -472,6 +509,327 @@ function loadPuzzle() {
 
 let attempts = 0;
 
+// --- Think timer ---------------------------------------------------------------
+// Counts only time the tab is visible. Resets on each new puzzle and after each wrong try,
+// so attempt 1's time is "how long you looked before your first move".
+const DEEP_THINK_SECS = 10;  // keep in sync with db.DEEP_THINK_SECS
+let thinkMs = 0, thinkSince = null, hintUsed = false, meterTimer = null;
+
+function thinkElapsed() {
+  return thinkMs + (thinkSince !== null ? performance.now() - thinkSince : 0);
+}
+function pauseThink() {
+  if (thinkSince !== null) { thinkMs += performance.now() - thinkSince; thinkSince = null; }
+}
+function resumeThink() {
+  if (thinkSince === null && !solved && !document.hidden) thinkSince = performance.now();
+}
+function startThinkTimer() {
+  thinkMs = 0; thinkSince = null; hintUsed = false;
+  resumeThink();
+  clearInterval(meterTimer);
+  meterTimer = setInterval(renderThinkMeter, 250);
+  renderThinkMeter();
+}
+document.addEventListener('visibilitychange', () => document.hidden ? pauseThink() : resumeThink());
+
+// Snapshot the current try and restart the clock for the next one.
+function takeAttempt(correct) {
+  pauseThink();
+  const info = { attempt_no: attempts + 1, think_ms: Math.round(thinkMs), correct, hinted: hintUsed };
+  thinkMs = 0;
+  if (correct) clearInterval(meterTimer); else resumeThink();
+  renderThinkMeter();
+  return info;
+}
+
+function renderThinkMeter() {
+  const el = document.getElementById('think-meter');
+  if (!el || !puzzles.length) return;
+  const secs = thinkElapsed() / 1000;
+  const firstTry = attempts === 0 && !hintUsed;
+  const pct = Math.min(100, secs / DEEP_THINK_SECS * 100);
+  const ready = firstTry && secs >= DEEP_THINK_SECS;
+  el.style.display = solved ? 'none' : '';
+  el.querySelector('.tm-fill').style.width = (firstTry ? pct : 0) + '%';
+  el.querySelector('.tm-fill').style.background = ready ? '#ffd700' : '#5aa9ff';
+  el.querySelector('.tm-label').textContent = !firstTry
+    ? `🧠 ${Math.floor(secs)}s`
+    : ready ? `🧠 ${Math.floor(secs)}s · Deep think bonus ready!`
+            : `🧠 ${Math.floor(secs)}s · think ${DEEP_THINK_SECS}s for a bonus`;
+}
+
+async function postAttempt(puzzleId, info) {
+  try {
+    await fetch(`/api/db/puzzles/${puzzleId}/attempt`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(info)
+    });
+  } catch (e) { /* stats only; never block play */ }
+}
+
+// Record a correct move: archive/score it, or just log it for bookmarked puzzles.
+function recordSolve(p, info) {
+  const secs = Math.round(info.think_ms / 1000);
+  const el = document.getElementById('feedback');
+  el.textContent += `  ·  ${secs}s`;
+  if (p.status === 'bookmarked') { postAttempt(p.id, info); return; }
+  const st = attempts === 0 ? 'solved_first_try' : 'solved_retry';
+  setPuzzleStatus(p.id, st, info);
+  markSolvedInQueue(p, st);
+}
+
+// --- Kotov candidate moves ------------------------------------------------------
+// In candidate mode a drag (or a typed move) adds to the list instead of playing it.
+// The player then clicks a candidate to play it. After the solve each candidate is graded.
+const KOTOV_MIN = 2, MAX_CANDIDATES = 6;
+let candidateMode = localStorage.getItem('fischer-candidates') === '1';
+let candidates = [];  // {uci, san, tried, verdict}
+
+function setCandidateMode(on) {
+  candidateMode = on;
+  localStorage.setItem('fischer-candidates', on ? '1' : '0');
+  const btn = document.getElementById('cand-btn');
+  btn.classList.toggle('active', on);
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  renderCandidates();
+}
+
+function resetCandidates() { candidates = []; renderCandidates(); }
+
+function addCandidate(move) {
+  const uci = moveUci(move);
+  if (candidates.some(c => c.uci === uci)) { chatMsg(move.san + ' is already on your list.', 'sys'); return; }
+  if (candidates.length >= MAX_CANDIDATES) { chatMsg('That\'s plenty. Pick one to play!', 'sys'); return; }
+  candidates.push({ uci, san: move.san, tried: false, verdict: null });
+  renderCandidates();
+}
+
+function removeCandidate(i) { candidates.splice(i, 1); renderCandidates(); }
+
+function playCandidate(i) {
+  if (solved || !game) return;
+  const c = candidates[i];
+  const move = game.move({ from: c.uci.slice(0, 2), to: c.uci.slice(2, 4), promotion: c.uci[4] || 'q' });
+  if (!move) return;
+  chatMsg(move.san, 'user');
+  judgeMove(move);
+  board.position(game.fen());
+  if (engineOn) startAnalysis();
+}
+
+function markCandidateTried(move) {
+  const c = candidates.find(c => c.uci === moveUci(move));
+  if (c) { c.tried = true; renderCandidates(); }
+}
+
+// What the server needs to score Kotov: the list, and which move was played.
+function candidatePayload(move) {
+  return candidates.length ? { candidates: candidates.map(c => c.uci), played: moveUci(move) } : {};
+}
+
+function renderCandidates() {
+  const panel = document.getElementById('cand-panel');
+  if (!panel) return;
+  const show = puzzles.length && (candidates.length || (candidateMode && !solved));
+  panel.style.display = show ? '' : 'none';
+  if (!show) return;
+  const need = Math.max(0, KOTOV_MIN - candidates.length);
+  document.getElementById('cand-hint').textContent = solved
+    ? 'How your candidates stacked up:'
+    : !candidateMode ? 'Candidate mode is off. Moves play directly.'
+    : candidates.length === 0 ? 'Drag pieces to list your candidate moves (checks, captures, threats). Nothing is played yet.'
+    : need > 0 ? `Add ${need} more for the Kotov bonus, then click one to play.`
+    : 'Click a candidate to play it.';
+  document.getElementById('cand-list').innerHTML = candidates.map((c, i) => {
+    const v = c.verdict;
+    const tag = v ? `<span class="cand-verdict ${v.cls}">${v.text}</span>`
+              : c.tried ? '<span class="cand-verdict bad">✗ tried</span>' : '';
+    const actions = solved || c.tried ? '' :
+      `<button class="cand-play" onclick="playCandidate(${i})" aria-label="Play ${c.san}">Play</button>
+       <button class="cand-x" onclick="removeCandidate(${i})" aria-label="Remove ${c.san}">✕</button>`;
+    // Why it's wrong. Before the solve: just the opponent's answer (never the right move).
+    // After: the full engine line, plus a button to replay it on the board.
+    let why = '';
+    const bad = (v && v.cls === 'bad') || (!v && c.tried);
+    if (bad && c.why && c.why.reason) {
+      why = `<div class="cand-why">↳ Opponent answers ${c.why.reason}.`;
+      if (solved && c.why.line.length) {
+        why += `<br>Line: <span class="cand-line">${c.san} ${c.why.line.join(' ')}</span>
+                <button onclick="showRefutation(${i})" aria-label="Show why ${c.san} fails on the board">▶ Show on board</button>`;
+      }
+      why += '</div>';
+    }
+    return `<li><div class="cand-row"><span class="cand-san">${c.san}</span>${tag}${actions}</div>${why}</li>`;
+  }).join('');
+}
+
+// --- Candidate grading (separate Stockfish worker so live analysis isn't disturbed) ---
+let gradeWorker = null, gradeQueue = Promise.resolve();
+
+function initGradeWorker() {
+  if (gradeWorker) return Promise.resolve();
+  return fetch('https://cdn.jsdelivr.net/npm/stockfish.js@10.0.2/stockfish.js')
+    .then(r => r.blob())
+    .then(blob => new Promise(resolve => {
+      gradeWorker = new Worker(URL.createObjectURL(blob));
+      gradeWorker.onmessage = e => {
+        const line = typeof e === 'string' ? e : (typeof e.data === 'string' ? e.data : '');
+        if (line === 'readyok') resolve();
+      };
+      gradeWorker.postMessage('uci');
+      gradeWorker.postMessage('isready');
+    }));
+}
+
+// Eval (from the mover's point of view) after playing `uci` from `fen`.
+// Returns {cp} or {mate} where mate > 0 means the mover mates, < 0 means the mover gets mated,
+// plus pv: the engine's best line from there (UCI, opponent moves first).
+function evalAfter(fen, uci, depth = 12) {
+  gradeQueue = gradeQueue.then(() => new Promise(resolve => {
+    let last = null, pv = [];
+    gradeWorker.onmessage = e => {
+      const line = typeof e === 'string' ? e : (typeof e.data === 'string' ? e.data : '');
+      const cp = line.match(/ score cp (-?\d+)/), mate = line.match(/ score mate (-?\d+)/);
+      if (cp) last = { cp: -parseInt(cp[1]) };          // engine speaks for the opponent
+      if (mate) last = { mate: -parseInt(mate[1]) };
+      const pvM = line.match(/ pv (.+)/);
+      if (pvM) pv = pvM[1].trim().split(/\s+/);
+      if (line.startsWith('bestmove')) resolve({ ...(last || { cp: 0 }), pv });
+    };
+    gradeWorker.postMessage('ucinewgame');
+    gradeWorker.postMessage('position fen ' + fen + ' moves ' + uci);
+    gradeWorker.postMessage('go depth ' + depth);
+  }));
+  return gradeQueue;
+}
+
+const asScore = e => e.mate !== undefined ? (e.mate > 0 ? 100000 - e.mate : -100000 - e.mate) : e.cp;
+
+const PIECE_NAME = { p: 'pawn', n: 'knight', b: 'bishop', r: 'rook', q: 'queen', k: 'king' };
+const toMove = (g, u) => g.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] || 'q' });
+
+// Why a move is wrong: replay the engine's best answer and describe it in kid terms.
+// Returns {line: [SAN of the refutation], reason: "Qxf7+ takes your pawn, with check", eval}.
+async function refute(fen, uci) {
+  await initGradeWorker();
+  const e = await evalAfter(fen, uci, 12);
+  const g = new Chess(fen);
+  if (!toMove(g, uci)) return null;
+  const moves = [];
+  for (const u of (e.pv || []).slice(0, 6)) {
+    const m = toMove(g, u);
+    if (!m) break;
+    moves.push(m);
+  }
+  return { line: moves.map(m => m.san), reason: describeRefutation(moves, e), eval: e };
+}
+
+function describeRefutation(moves, e) {
+  const reply = moves[0];
+  if (!reply) return '';
+  if (reply.san.endsWith('#')) return `${reply.san}, checkmate`;
+  // e.g. "Qxf7+ (takes your pawn, with check), and forces checkmate in 2"
+  const what = [];
+  if (reply.captured) what.push(`takes your ${PIECE_NAME[reply.captured]}`);
+  if (reply.san.endsWith('+')) what.push('with check');
+  let text = reply.san + (what.length ? ` (${what.join(', ')})` : '');
+  // Quiet reply: the damage shows up a move later -- find the opponent's first capture.
+  if (!reply.captured) {
+    const later = moves.find((m, i) => i % 2 === 0 && i > 0 && m.captured);
+    if (later) text += `, then ${later.san} takes your ${PIECE_NAME[later.captured]}`;
+  }
+  if (e.mate !== undefined && e.mate < 0 && -e.mate > 1) text += `, and forces checkmate in ${-e.mate}`;
+  return text;
+}
+
+// Pre-solve: after a wrong move, say what the opponent would answer (not what the right move is).
+let puzzleToken = 0;
+async function explainWrong(p, move) {
+  const token = puzzleToken, uci = moveUci(move);
+  try {
+    const r = await refute(p.fen, uci);
+    if (!r || token !== puzzleToken || !r.reason) return;
+    chatMsg(`Why not ${move.san}? Your opponent answers ${r.reason}.`, 'sys');
+    const c = candidates.find(c => c.uci === uci);
+    if (c) { c.why = r; renderCandidates(); }
+  } catch (err) { /* engine unavailable: the "Try again" message still stands */ }
+}
+
+// Post-solve: put the candidate + refutation on the board; → steps through the reply.
+function showRefutation(i) {
+  const c = candidates[i], p = current;
+  if (!solved || !c || !c.why) return;
+  game = new Chess(p.fen);
+  const m = toMove(game, c.uci);
+  if (!m) return;
+  moveHistory = [m.san];
+  redoStack = c.why.line.slice().reverse();  // forward-btn pops from the end
+  board.position(game.fen());
+  chatMsg(`Showing ${m.san}. Press → (or Forward) to see ${c.why.line[0]} and what follows.`, 'sys');
+  if (engineOn) startAnalysis();
+}
+
+async function reviewCandidates(p) {
+  if (!candidates.length) return;
+  const isBest = c => c.uci.slice(0, 4) === p.solution_uci.slice(0, 4);
+  const isOk = c => (p.acceptable_uci || []).some(a => a.slice(0, 4) === c.uci.slice(0, 4));
+  const best = candidates.some(isBest) ? 'listed' : 'missing';
+  candidates.forEach(c => {
+    if (isBest(c)) c.verdict = { cls: 'good', text: '✓ best move' };
+    else if (isOk(c)) c.verdict = { cls: 'ok', text: '~ good too' };
+  });
+  chatMsg(best === 'listed' ? '📝 The best move was on your list.'
+                            : `📝 The best move (${p.solution_san}) wasn't on your list. Next time, look at every check and capture.`,
+          best === 'listed' ? 'ok' : 'sys');
+  const toGrade = candidates.filter(c => !c.verdict);
+  if (!toGrade.length) { renderCandidates(); return; }
+  toGrade.forEach(c => c.verdict = { cls: 'pending', text: '… checking' });
+  renderCandidates();
+  try {
+    await initGradeWorker();
+    const ref = asScore(await evalAfter(p.fen, p.solution_uci));
+    for (const c of toGrade) {
+      const r = c.why || await refute(p.fen, c.uci);  // reuse the pre-solve explanation if any
+      if (!r) { c.verdict = { cls: 'bad', text: '✗ not best' }; continue; }
+      c.why = r;
+      const e = r.eval;
+      if (e.mate !== undefined && e.mate < 0) c.verdict = { cls: 'bad', text: `✗ allows mate in ${-e.mate}` };
+      else {
+        const loss = Math.max(0, ref - asScore(e)) / 100;
+        c.verdict = loss < 0.5 ? { cls: 'ok', text: '~ close' }
+                  : { cls: 'bad', text: `✗ loses ${loss >= 50 ? 'the game' : loss.toFixed(1) + ' pawns'}` };
+      }
+      renderCandidates();
+    }
+  } catch (err) {
+    toGrade.forEach(c => { if (c.verdict && c.verdict.cls === 'pending') c.verdict = { cls: 'bad', text: '✗ not best' }; });
+    renderCandidates();
+  }
+}
+
+// After the solve, connect the puzzle back to the real game: the tempting move he actually played.
+function showGameMove(p) {
+  if (!p.played) return;
+  let cost;
+  if (/mate/i.test(p.reason || '')) cost = 'and missed a checkmate';
+  else if ((p.drop || 0) >= 10000) cost = 'which let your opponent win by checkmate';
+  else if (p.drop) cost = `which lost about ${(p.drop / 100).toFixed(1)} pawns`;
+  else cost = '';
+  chatMsg(`🎯 In your game you played ${p.played}${cost ? ', ' + cost : ''}. Today you found ${p.solution_san}.`, 'sys');
+}
+
+function showKotov() {
+  const el = document.getElementById('feedback');
+  el.textContent += '  📝 Kotov bonus!';
+  chatMsg('📝 Kotov bonus: you listed your candidates and picked a winner.', 'ok');
+}
+
+function showDeepThink() {
+  const el = document.getElementById('feedback');
+  el.textContent += '  🧠 Deep think bonus! Better odds of a new Pokémon';
+  chatMsg('🧠 Deep think bonus: you took your time and nailed it.', 'ok');
+}
+
 async function loadUserPuzzles() {
   if (!activeProfile) return;
   const r = await fetch(`/api/db/users/${activeProfile}/puzzle-queue`);
@@ -481,6 +839,7 @@ async function loadUserPuzzles() {
     acceptable_uci: (p.acceptable_uci||'').split(',').filter(x=>x),
     tactics: (p.tactics||'').split(',').filter(x=>x),
     move_number: p.move_number, status: p.status,
+    played: p.played_move || '', drop: p.drop_cp || 0, reason: p.reason || '',
     white: p.game_white || '?', black: p.game_black || '?',
     event: p.game_event || '', date: p.game_date || ''
   }));
@@ -499,12 +858,14 @@ async function loadUserPuzzles() {
   loadEggStatus();
 }
 
-async function setPuzzleStatus(puzzleId, status) {
+async function setPuzzleStatus(puzzleId, status, attempt) {
   const resp = await fetch(`/api/db/puzzles/${puzzleId}/status`, {
     method:'PUT', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({status})
+    body: JSON.stringify(attempt ? {status, attempt} : {status})
   });
   const data = await resp.json();
+  if (data.deep_think) showDeepThink();
+  if (data.kotov) showKotov();
   if (data.caught) showCatchNotification(data.caught);
   if (data.egg) { showEggNotification(data.egg); loadEggStatus(); }
   if (data.new_badges && data.new_badges.length) {
@@ -705,11 +1066,21 @@ function showBadgeNotification(badge) {
     </div>`, '#4ecca3', 3800);
 }
 
+// Take the board's puzzle out of the queue, if a solve hasn't already. Afterwards idx
+// points at the puzzle that followed it.
+function removeCurrentFromQueue(p) {
+  const i = puzzles.indexOf(p);
+  if (i === -1) return;
+  puzzles.splice(i, 1);
+  if (idx > i) idx--;
+}
+
 async function archivePuzzle() {
-  if (!puzzles.length) return;
-  const p = puzzles[idx];
+  const p = current;
+  if (!p) return;
   await setPuzzleStatus(p.id, 'archived');
-  puzzles.splice(idx, 1);
+  p.status = 'archived';
+  removeCurrentFromQueue(p);
   if (!puzzles.length) { showFeedback('Queue empty!', 'info'); return; }
   if (idx >= puzzles.length) idx = puzzles.length - 1;
   attempts = 0;
@@ -732,8 +1103,9 @@ document.getElementById('counter-input').addEventListener('keydown', function(e)
   if (e.key === 'Enter') { this.blur(); }
 });
 document.getElementById('hint-btn').addEventListener('click', () => {
-  if (!puzzles.length) return;
-  const p = puzzles[idx];
+  const p = current;
+  if (!p) return;
+  if (!solved) hintUsed = true;  // a hinted solve doesn't earn the deep-think bonus
   const sq = p.solution_uci.substring(0, 2);
   $('#board .square-' + sq).css('background', 'rgba(233,69,96,0.5)');
   setTimeout(() => $('#board .square-' + sq).css('background', ''), 1500);
@@ -741,15 +1113,18 @@ document.getElementById('hint-btn').addEventListener('click', () => {
 
 document.getElementById('archive-btn').addEventListener('click', archivePuzzle);
 
+document.getElementById('cand-btn').addEventListener('click', () => setCandidateMode(!candidateMode));
+setCandidateMode(candidateMode);  // restore the saved preference
+
 document.getElementById('bookmark-btn').addEventListener('click', async () => {
-  if (!puzzles.length) return;
-  const p = puzzles[idx];
+  const p = current;
+  if (!p) return;
   await setPuzzleStatus(p.id, 'bookmarked');
   p.status = 'bookmarked';
-  // Move to end of queue instead of removing
-  puzzles.splice(idx, 1);
+  // Move to end of queue instead of removing (re-adds it if a first-try solve archived it)
+  removeCurrentFromQueue(p);
   puzzles.push(p);
-  if (idx >= puzzles.length) idx = 0;
+  if (idx >= puzzles.length || (puzzles[idx] === p && puzzles.length > 1)) idx = 0;
   attempts = 0;
   loadPuzzle();
 });
@@ -789,48 +1164,13 @@ function handleChatMove() {
     chatMsg('Invalid move. Try again.', 'err');
     return;
   }
-  const uci = move.from + move.to;
-  const uciQ = uci + 'q';
-  if (uci === p.solution_uci || uciQ === p.solution_uci) {
-    solved = true;
-    moveHistory = [move.san]; redoStack = [];
-    document.getElementById('explore-controls').style.display = 'flex';
-    board.position(game.fen());
-    chatMsg('✓ Correct! ' + p.solution_san, 'ok');
-    showFeedback('✓ Correct! ' + p.solution_san, 'correct');
-    if (p.status !== 'bookmarked') {
-      const st = attempts === 0 ? 'solved_first_try' : 'solved_retry';
-      setPuzzleStatus(p.id, st);
-      markSolvedInQueue(p, st);
-    }
-  } else if ((p.acceptable_uci || []).some(a => a === uci || a === uciQ)) {
-    solved = true;
-    moveHistory = [move.san]; redoStack = [];
-    document.getElementById('explore-controls').style.display = 'flex';
-    board.position(game.fen());
-    chatMsg('✓ Acceptable! Best was ' + p.solution_san, 'ok');
-    showFeedback('✓ Acceptable! Best was ' + p.solution_san, 'info');
-    if (p.status !== 'bookmarked') {
-      const st = attempts === 0 ? 'solved_first_try' : 'solved_retry';
-      setPuzzleStatus(p.id, st);
-      markSolvedInQueue(p, st);
-    }
-  } else {
-    attempts++;
+  if (candidateMode) {
     game.undo();
-    if (attempts >= 3) {
-      chatMsg('Too tough! Saved to Worth a 2nd Look.', 'sys');
-      showFeedback('Too tough! Saved to Worth a 2nd Look.', 'info');
-      setPuzzleStatus(p.id, 'bookmarked');
-      p.status = 'bookmarked';
-      puzzles.splice(idx, 1);
-      puzzles.push(p);
-      if (idx >= puzzles.length) idx = 0;
-      setTimeout(() => { attempts = 0; loadPuzzle(); }, 1200);
-      return;
-    }
-    chatMsg('Incorrect, try again.', 'err');
+    addCandidate(move);
+    return;
   }
+  judgeMove(move);
+  board.position(game.fen());
 }
 
 document.getElementById('chat-send').addEventListener('click', handleChatMove);
@@ -853,8 +1193,8 @@ document.getElementById('forward-btn').addEventListener('click', () => {
   if (move) { moveHistory.push(san); updateBoard(); }
 });
 document.getElementById('reset-btn').addEventListener('click', () => {
-  if (!solved || !puzzles.length) return;
-  const p = puzzles[idx];
+  if (!solved || !current) return;
+  const p = current;
   game = new Chess(p.fen);
   moveHistory = []; redoStack = [];
   updateBoard();
@@ -893,7 +1233,7 @@ function handleEngineInfo(line) {
   const cpM = line.match(/ cp (-?\d+)/);
   const mateM = line.match(/ mate (-?\d+)/);
   const pvMoves = line.match(/ pv (.+)/);
-  if (!pvMoves) return;
+  if (!pvMoves || !solved) return;  // drop stray lines that arrive after the lock
   const depth = depthM ? depthM[1] : '?';
   const pvNum = pvIdx ? parseInt(pvIdx[1]) : 1;
   let evalStr;
@@ -926,6 +1266,14 @@ function handleEngineInfo(line) {
 
 function startAnalysis() {
   if (!sf || !engineReady || !game) return;
+  if (!solved) {
+    // No engine help before the player commits; it unlocks for free exploration.
+    sf.postMessage('stop');
+    analysisId++;
+    document.getElementById('engine-lines').innerHTML = '';
+    document.getElementById('engine-status').textContent = '🔒 Engine unlocks after you solve the puzzle';
+    return;
+  }
   analysisId++;
   document.getElementById('engine-lines').innerHTML = '';
   document.getElementById('engine-status').textContent = 'Thinking...';
@@ -1283,5 +1631,6 @@ function renderTrends(data) {
   });
 }
 </script>
+<footer class="app-version" style="text-align:center;font-size:.75em;color:#888;margin:24px 0 12px;">Fischer Chess {{ app_version }}</footer>
 </body>
 </html>

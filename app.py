@@ -14,6 +14,43 @@ app.secret_key = os.environ.get('FISCHER_SECRET_KEY', 'change-me-in-production-'
 
 PUZZLE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+
+def _read_app_version():
+    """Return a display version like 'v1.0.0 (22da5e7+)'.
+
+    The base number comes from the VERSION file (bump it by hand on release).
+    When the app runs from a git checkout, the short commit hash is appended,
+    with '+' if there are uncommitted changes. Hosts without git (e.g. an scp
+    deploy) just show the base number.
+    """
+    import subprocess
+    try:
+        with open(os.path.join(PUZZLE_DIR, 'VERSION')) as f:
+            base = f.read().strip() or '0.0.0'
+    except OSError:
+        base = '0.0.0'
+    label = f'v{base}'
+    try:
+        sha = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=PUZZLE_DIR,
+                             capture_output=True, text=True, timeout=2, check=True).stdout.strip()
+        dirty = subprocess.run(['git', 'status', '--porcelain', '--untracked-files=no'],
+                               cwd=PUZZLE_DIR, capture_output=True, text=True,
+                               timeout=2, check=True).stdout.strip()
+        if sha:
+            label += f' ({sha}{"+" if dirty else ""})'
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return label
+
+
+APP_VERSION = _read_app_version()
+
+
+@app.context_processor
+def _inject_version():
+    # Makes {{ app_version }} available in every template.
+    return {'app_version': APP_VERSION}
+
 # --- Password gate (FR-2.1.3) ---
 APP_PASSWORD = os.environ.get('FISCHER_PASSWORD', 'fischer')
 
@@ -563,9 +600,33 @@ def api_db_update_puzzle_status(puzzle_id):
     status = data.get("status")
     if status not in ("active", "solved_first_try", "solved_retry", "archived", "bookmarked"):
         return jsonify({"error": "Invalid status"}), 400
-    result = db.update_puzzle_status(puzzle_id, status)
+    attempt = data.get("attempt") if isinstance(data.get("attempt"), dict) else None
+    result = db.update_puzzle_status(puzzle_id, status, attempt)
     return jsonify({"ok": True, "new_badges": result["new_badges"] or [], "caught": result["caught"],
-                    "egg": result["egg"]})
+                    "egg": result["egg"], "deep_think": result["deep_think"],
+                    "kotov": result["kotov"]})
+
+
+@app.route("/api/db/puzzles/<int:puzzle_id>/attempt", methods=["POST"])
+def api_db_record_attempt(puzzle_id):
+    data = request.get_json() or {}
+    return jsonify({"ok": True, **db.record_attempt(puzzle_id, data)})
+
+
+@app.route("/api/db/users/<username>/kotov-stats", methods=["GET"])
+def api_db_user_kotov_stats(username):
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(db.get_kotov_stats(user["id"]))
+
+
+@app.route("/api/db/users/<username>/think-stats", methods=["GET"])
+def api_db_user_think_stats(username):
+    user = db.get_user(username)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(db.get_think_stats(user["id"]))
 
 
 @app.route("/api/db/users/<username>/daily-egg", methods=["GET"])
@@ -869,5 +930,7 @@ def api_db_loss_detail(username, game_id):
 
 
 if __name__ == "__main__":
+    # Loopback by default so a local run isn't reachable from the LAN. A server deploy
+    # must opt in to a wider bind explicitly via FISCHER_HOST.
     app.run(debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true',
-            host='0.0.0.0', port=5001)
+            host=os.environ.get('FISCHER_HOST', '127.0.0.1'), port=5001)

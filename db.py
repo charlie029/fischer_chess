@@ -109,6 +109,31 @@ def init_db():
         UNIQUE(user_id, day)
     )""")
 
+    # Think-time log: one row per move tried on an unsolved puzzle. think_ms is the visible-tab
+    # time since the puzzle loaded (attempt 1) or since the previous wrong try (later attempts).
+    conn.execute("""CREATE TABLE IF NOT EXISTS puzzle_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        puzzle_id INTEGER,
+        attempt_no INTEGER NOT NULL,
+        think_ms INTEGER NOT NULL,
+        correct INTEGER NOT NULL,
+        hinted INTEGER NOT NULL DEFAULT 0,
+        deep_think INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_attempts_user ON puzzle_attempts(user_id)")
+    # Kotov candidate moves: comma-separated UCI the player listed before moving (NULL = none),
+    # whether a winning move (best or acceptable) was on that list, and the Kotov bonus.
+    att_cols = [r[1] for r in conn.execute("PRAGMA table_info(puzzle_attempts)").fetchall()]
+    if "candidates" not in att_cols:
+        conn.execute("ALTER TABLE puzzle_attempts ADD COLUMN candidates TEXT")
+    if "good_listed" not in att_cols:
+        conn.execute("ALTER TABLE puzzle_attempts ADD COLUMN good_listed INTEGER")
+    if "kotov" not in att_cols:
+        conn.execute("ALTER TABLE puzzle_attempts ADD COLUMN kotov INTEGER NOT NULL DEFAULT 0")
+
     # Migration: add lichess_username to users table
     user_cols = [r[1] for r in conn.execute("PRAGMA table_info(users)").fetchall()]
     if "lichess_username" not in user_cols:
@@ -192,6 +217,7 @@ def delete_user(username):
         conn.execute("DELETE FROM badges WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM pokedex_catches WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM daily_eggs WHERE user_id = ?", (user["id"],))
+        conn.execute("DELETE FROM puzzle_attempts WHERE user_id = ?", (user["id"],))
         conn.execute("DELETE FROM users WHERE id = ?", (user["id"],))
         conn.commit()
         return True
@@ -308,11 +334,126 @@ def get_queue_puzzles(user_id):
         conn.close()
 
 
-def update_puzzle_status(puzzle_id, status):
+DEEP_THINK_SECS = 10          # first-try solve after at least this long earns the bonus
+MAX_THINK_MS = 10 * 60 * 1000  # cap so a board left open overnight doesn't skew stats
+
+
+KOTOV_MIN_CANDIDATES = 2      # list at least this many moves, then play one of them
+_NO_BONUS = {"deep_think": False, "kotov": False}
+
+
+def _same_move(a, b):
+    # Drag-and-drop always promotes to a queen, so compare from/to squares only.
+    return bool(a) and bool(b) and a[:4] == b[:4]
+
+
+def _insert_attempt(conn, puzzle_id, attempt):
+    """Log one move attempt and work out its bonuses. Caller commits.
+
+    attempt from the client: {"attempt_no", "think_ms", "correct", "hinted",
+    "candidates": [uci, ...], "played": uci}.
+    Returns {"deep_think": bool, "kotov": bool}.
+    """
+    row = conn.execute("SELECT user_id, best_move_uci, acceptable_uci FROM puzzles WHERE id = ?",
+                       (puzzle_id,)).fetchone()
+    if not row:
+        return dict(_NO_BONUS)
+    try:
+        think_ms = max(0, min(int(attempt.get("think_ms") or 0), MAX_THINK_MS))
+        attempt_no = max(1, int(attempt.get("attempt_no") or 1))
+    except (TypeError, ValueError):
+        return dict(_NO_BONUS)
+    correct = bool(attempt.get("correct"))
+    hinted = bool(attempt.get("hinted"))
+    clean_first_try = correct and attempt_no == 1 and not hinted
+    deep = clean_first_try and think_ms >= DEEP_THINK_SECS * 1000
+
+    raw = attempt.get("candidates")
+    cands = [c for c in raw if isinstance(c, str) and 4 <= len(c) <= 5][:10] if isinstance(raw, list) else []
+    played = attempt.get("played") if isinstance(attempt.get("played"), str) else ""
+    winning = [row["best_move_uci"]] + [a for a in (row["acceptable_uci"] or "").split(",") if a]
+    good_listed = any(_same_move(c, w) for c in cands for w in winning) if cands else None
+    kotov = (clean_first_try and len(cands) >= KOTOV_MIN_CANDIDATES
+             and any(_same_move(c, played) for c in cands))
+
+    conn.execute("""INSERT INTO puzzle_attempts
+                    (user_id, puzzle_id, attempt_no, think_ms, correct, hinted, deep_think,
+                     candidates, good_listed, kotov)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 (row["user_id"], puzzle_id, attempt_no, think_ms, int(correct), int(hinted),
+                  int(deep), ",".join(cands) or None,
+                  None if good_listed is None else int(good_listed), int(kotov)))
+    return {"deep_think": deep, "kotov": kotov}
+
+
+def record_attempt(puzzle_id, attempt):
+    """Log an attempt that doesn't change puzzle status (wrong move, or re-solving a bookmark)."""
+    conn = get_db()
+    try:
+        bonus = _insert_attempt(conn, puzzle_id, attempt)
+        conn.commit()
+        return bonus
+    finally:
+        conn.close()
+
+
+def get_kotov_stats(user_id):
+    """Split first-try misses into "didn't see it" (vision) vs "saw it, picked another" (judgment)."""
+    conn = get_db()
+    try:
+        rows = conn.execute("""SELECT correct, good_listed FROM puzzle_attempts
+                               WHERE user_id = ? AND attempt_no = 1 AND good_listed IS NOT NULL""",
+                            (user_id,)).fetchall()
+        bonuses = conn.execute("SELECT COUNT(*) FROM puzzle_attempts WHERE user_id = ? AND kotov = 1",
+                               (user_id,)).fetchone()[0]
+    finally:
+        conn.close()
+    listed = [r for r in rows if r["good_listed"]]
+    pct = lambda n, d: round(100 * n / d) if d else None
+    return {
+        "puzzles": len(rows),
+        "kotov_bonuses": bonuses,
+        "min_candidates": KOTOV_MIN_CANDIDATES,
+        "found_rate": pct(len(listed), len(rows)),          # a winning move made the list
+        "picked_rate": pct(sum(r["correct"] for r in listed), len(listed)),  # ...and got played
+        "missed_unseen": sum(1 for r in rows if not r["good_listed"] and not r["correct"]),
+        "missed_seen": sum(1 for r in listed if not r["correct"]),
+    }
+
+
+def get_think_stats(user_id):
+    """First-attempt accuracy by think-time bucket, so a kid can see that slowing down pays."""
+    buckets = [("Under 5s", 0, 5000), ("5-10s", 5000, 10000),
+               ("10-30s", 10000, 30000), ("30s+", 30000, None)]
+    conn = get_db()
+    try:
+        rows = conn.execute("""SELECT think_ms, correct FROM puzzle_attempts
+                               WHERE user_id = ? AND attempt_no = 1 AND hinted = 0""",
+                            (user_id,)).fetchall()
+        deep = conn.execute("SELECT COUNT(*) FROM puzzle_attempts WHERE user_id = ? AND deep_think = 1",
+                            (user_id,)).fetchone()[0]
+    finally:
+        conn.close()
+    out = []
+    for label, lo, hi in buckets:
+        hits = [r["correct"] for r in rows if r["think_ms"] >= lo and (hi is None or r["think_ms"] < hi)]
+        out.append({"label": label, "attempts": len(hits),
+                    "accuracy": round(100 * sum(hits) / len(hits)) if hits else None})
+    times = sorted(r["think_ms"] for r in rows)
+    median = times[len(times) // 2] / 1000 if times else None
+    return {"buckets": out, "median_secs": round(median, 1) if median is not None else None,
+            "first_attempts": len(rows), "deep_thinks": deep, "deep_think_secs": DEEP_THINK_SECS}
+
+
+def update_puzzle_status(puzzle_id, status, attempt=None):
     """Update a puzzle's status. On a solve, catch a Pokémon and check badges.
 
-    Returns {"new_badges": [...], "caught": {...} or None, "egg": {...} or None}.
-    The day's first solve also hatches the daily egg.
+    attempt: optional think-time / candidate info for the solving move. Process is rewarded
+    more than time: a Kotov solve moves the Pokémon roll one rarity row up, while a deep-think
+    solve only makes a not-yet-caught Pokémon more likely.
+
+    Returns {"new_badges": [...], "caught": {...} or None, "egg": {...} or None,
+    "deep_think": bool, "kotov": bool}. The day's first solve also hatches the daily egg.
     """
     from badges import check_badges
     from pokedex import catch_for_puzzle, hatch_daily_egg
@@ -323,14 +464,17 @@ def update_puzzle_status(puzzle_id, status):
                          (status, puzzle_id))
         else:
             conn.execute("UPDATE puzzles SET status = ? WHERE id = ?", (status, puzzle_id))
+        bonus = _insert_attempt(conn, puzzle_id, attempt) if attempt else dict(_NO_BONUS)
         conn.commit()
-        result = {"new_badges": [], "caught": None, "egg": None}
+        result = {"new_badges": [], "caught": None, "egg": None, **bonus}
         if status in ("solved_first_try", "solved_retry"):
             row = conn.execute("SELECT user_id FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
             if row:
                 # Catch first so a new Pokédex milestone badge is awarded on this same solve.
                 result["caught"] = catch_for_puzzle(conn, row[0], puzzle_id,
-                                                    status == "solved_first_try")
+                                                    status == "solved_first_try",
+                                                    bonus=int(bonus["kotov"]),
+                                                    deep_think=bonus["deep_think"])
                 result["egg"] = hatch_daily_egg(conn, row[0])
                 conn.commit()
                 result["new_badges"] = check_badges(conn, row[0])

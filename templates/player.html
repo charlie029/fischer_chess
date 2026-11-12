@@ -54,6 +54,14 @@
   </div>
   <div id="tactics-chart"></div>
 
+  <h2>Think Time</h2>
+  <p id="think-summary" style="color:#aaa;margin:-4px 0 12px;"></p>
+  <div class="stats-grid" id="think-grid"></div>
+
+  <h2>Candidate Moves (Kotov)</h2>
+  <p id="kotov-summary" style="color:#aaa;margin:-4px 0 12px;"></p>
+  <div class="stats-grid" id="kotov-grid"></div>
+
   <h2>Blunder Rate Trend</h2>
   <div style="margin-bottom:10px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
     <label style="color:#e0e0e0;">X-axis:
@@ -141,6 +149,54 @@ async function loadAll() {
   renderGames(games);
   renderBadges(badgeData);
   loadPokedex();
+  loadThinkStats();
+  loadKotovStats();
+}
+
+// Did the winning move make the candidate list, and when it did, was it picked?
+async function loadKotovStats() {
+  const k = await fetch(`/api/db/users/${USER}/kotov-stats`).then(r => r.json());
+  const summary = document.getElementById('kotov-summary');
+  const grid = document.getElementById('kotov-grid');
+  if (!k.puzzles) {
+    summary.textContent = 'Turn on 📝 Candidates and list a few moves before playing to see this.';
+    grid.innerHTML = '';
+    return;
+  }
+  const pct = v => v === null ? '—' : v + '%';
+  summary.textContent = `${k.puzzles} puzzle${k.puzzles === 1 ? '' : 's'} with candidates · ` +
+    `📝 Kotov bonuses: ${k.kotov_bonuses} (${k.min_candidates}+ candidates, first try, no hint)`;
+  const box = (val, label, sub) => `
+    <div class="stat-box">
+      <div class="stat-val">${val}</div>
+      <div class="stat-label">${label}</div>
+      <div class="stat-label" style="opacity:.7">${sub}</div>
+    </div>`;
+  grid.innerHTML =
+    box(pct(k.found_rate), 'Winning move on your list', 'how often you spotted it') +
+    box(pct(k.picked_rate), 'Picked it when listed', 'how often you chose right') +
+    box(k.missed_unseen, "Missed: didn't see it", 'practice more tactics') +
+    box(k.missed_seen, 'Missed: saw it, chose another', 'slow down on the final pick');
+}
+
+// First-try accuracy by how long the player looked before moving.
+async function loadThinkStats() {
+  const t = await fetch(`/api/db/users/${USER}/think-stats`).then(r => r.json());
+  const summary = document.getElementById('think-summary');
+  const grid = document.getElementById('think-grid');
+  if (!t.first_attempts) {
+    summary.textContent = 'No timed puzzles yet. Solve a few and see how thinking longer pays off.';
+    grid.innerHTML = '';
+    return;
+  }
+  summary.textContent = `Typical think time: ${t.median_secs}s · 🧠 Deep think bonuses: ${t.deep_thinks} ` +
+    `(first-try solves after ${t.deep_think_secs}s+, no hint)`;
+  grid.innerHTML = t.buckets.map(b => `
+    <div class="stat-box">
+      <div class="stat-val">${b.accuracy === null ? '—' : b.accuracy + '%'}</div>
+      <div class="stat-label">First-try correct · ${b.label}</div>
+      <div class="stat-label" style="opacity:.7">${b.attempts} puzzle${b.attempts === 1 ? '' : 's'}</div>
+    </div>`).join('');
 }
 
 const DEX_COLORS = {common:'#aaaaaa', uncommon:'#4ecca3', rare:'#5aa9ff', legendary:'#ffd700'};
@@ -408,5 +464,6 @@ document.getElementById('delete-btn').addEventListener('click', async () => {
 
 loadAll();
 </script>
+<footer class="app-version" style="text-align:center;font-size:.75em;color:#888;margin:24px 0 12px;">Fischer Chess {{ app_version }}</footer>
 </body>
 </html>

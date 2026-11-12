@@ -108,6 +108,26 @@ BADGE_CONFIG = {
             (5, 20, "Red", "/static/badges/red.png"),
         ],
     },
+    "deep_thinker": {
+        "label": "Deep Thinker",
+        "desc": "Take your time (10s+) and solve on the first try, no hint",
+        "mystery_from": 3,
+        "tiers": [
+            (1, 3, "Slowpoke", "/static/pokedex/79.png"),
+            (2, 10, "Slowbro", "/static/pokedex/80.png"),
+            (3, 25, "Snorlax", "/static/pokedex/143.png"),
+        ],
+    },
+    "kotov": {
+        "label": "Candidate Master",
+        "desc": "List 2+ candidate moves, then play one and solve on the first try",
+        "mystery_from": 3,
+        "tiers": [
+            (1, 3, "Drowzee", "/static/pokedex/96.png"),
+            (2, 10, "Hypno", "/static/pokedex/97.png"),
+            (3, 25, "Lapras", "/static/pokedex/131.png"),
+        ],
+    },
     "pokedex": {
         "label": "Pokédex",
         "desc": "Catch different Pokémon by solving puzzles",
@@ -273,6 +293,18 @@ def check_badges(conn, user_id):
             if count >= threshold:
                 award(badge_type, tier, name, img)
 
+    # --- Deep Thinker: first-try solves that took their time ---
+    deep = _deep_think_count(conn, user_id)
+    for tier, threshold, name, img in BADGES["deep_thinker"]:
+        if deep >= threshold:
+            award("deep_thinker", tier, name, img)
+
+    # --- Candidate Master: Kotov-method solves ---
+    kotov = _kotov_count(conn, user_id)
+    for tier, threshold, name, img in BADGES["kotov"]:
+        if kotov >= threshold:
+            award("kotov", tier, name, img)
+
     # --- Pokédex: unique Pokémon caught ---
     from pokedex import unique_caught
     caught = unique_caught(conn, user_id)
@@ -283,6 +315,18 @@ def check_badges(conn, user_id):
     if newly_earned:
         conn.commit()
     return newly_earned
+
+
+def _deep_think_count(conn, user_id):
+    return conn.execute(
+        "SELECT COUNT(DISTINCT puzzle_id) FROM puzzle_attempts WHERE user_id = ? AND deep_think = 1",
+        (user_id,)).fetchone()[0]
+
+
+def _kotov_count(conn, user_id):
+    return conn.execute(
+        "SELECT COUNT(DISTINCT puzzle_id) FROM puzzle_attempts WHERE user_id = ? AND kotov = 1",
+        (user_id,)).fetchone()[0]
 
 
 def _calc_daily_streak(day_rows):
@@ -356,6 +400,8 @@ def get_progress(conn, user_id):
     return {
         **_tactic_counts(conn, user_id),
         "pokedex": unique_caught(conn, user_id),
+        "deep_thinker": _deep_think_count(conn, user_id),
+        "kotov": _kotov_count(conn, user_id),
         "volume": total_solved,
         "first_try_streak": first_try_streak,
         "daily_streak": daily_streak,

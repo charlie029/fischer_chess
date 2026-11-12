@@ -60,6 +60,7 @@ RETRY_ODDS = (85, 15, 0, 0)
 
 # When rolling inside a rarity pool, chance to prefer a Pokémon the kid hasn't caught yet.
 PREFER_NEW = 0.5
+DEEP_THINK_PREFER_NEW = 0.85
 
 _HARD = {"fork", "pin", "skewer", "trapped piece", "promotion"}
 _HARDER = {"discovered attack", "discovered check"}
@@ -90,18 +91,23 @@ def difficulty(tactics_csv):
     return 0
 
 
-def roll(tactics_csv, first_try, caught_ids, rng=random):
-    """Pick a Pokémon id for a solve. Returns (pokemon_id, rarity)."""
-    odds = FIRST_TRY_ODDS[difficulty(tactics_csv)] if first_try else RETRY_ODDS
+def roll(tactics_csv, first_try, caught_ids, rng=random, bonus=0, deep_think=False):
+    """Pick a Pokémon id for a solve. Returns (pokemon_id, rarity).
+
+    bonus: process bonuses earned (Kotov). Each rolls one difficulty row higher, capped.
+    deep_think: a smaller, time-based reward -- better odds of a Pokémon not yet caught.
+    """
+    level = min(difficulty(tactics_csv) + max(0, bonus), len(FIRST_TRY_ODDS) - 1)
+    odds = FIRST_TRY_ODDS[level] if first_try else RETRY_ODDS
     rarity = rng.choices(RARITY_ORDER, weights=odds, k=1)[0]
     pool = sorted(RARITY_POOLS[rarity])
     unseen = [p for p in pool if p not in caught_ids]
-    if unseen and rng.random() < PREFER_NEW:
+    if unseen and rng.random() < (DEEP_THINK_PREFER_NEW if deep_think else PREFER_NEW):
         pool = unseen
     return rng.choice(pool), rarity
 
 
-def catch_for_puzzle(conn, user_id, puzzle_id, first_try):
+def catch_for_puzzle(conn, user_id, puzzle_id, first_try, bonus=0, deep_think=False):
     """Catch a Pokémon for a solved puzzle. At most one catch per puzzle.
 
     Returns a dict describing the catch, or None if this puzzle already caught one.
@@ -114,7 +120,7 @@ def catch_for_puzzle(conn, user_id, puzzle_id, first_try):
     tactics = row[0] if row else ""
     caught = {r[0] for r in conn.execute(
         "SELECT DISTINCT pokemon_id FROM pokedex_catches WHERE user_id = ?", (user_id,))}
-    pid, rarity = roll(tactics, first_try, caught)
+    pid, rarity = roll(tactics, first_try, caught, bonus=bonus, deep_think=deep_think)
     conn.execute("INSERT INTO pokedex_catches (user_id, pokemon_id, puzzle_id) VALUES (?, ?, ?)",
                  (user_id, pid, puzzle_id))
     return {"id": pid, "name": NAMES[pid - 1], "rarity": rarity, "image": sprite(pid),
