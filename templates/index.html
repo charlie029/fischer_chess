@@ -370,6 +370,8 @@ let moveHistory = [], redoStack = [];
 // The puzzle on the board. Not always puzzles[idx]: a solve removes it from the queue
 // (markSolvedInQueue), so post-solve exploration must use this instead.
 let current = null;
+// Queue slot vacated by the puzzle just solved on the board (null once a new puzzle loads).
+let solvedGap = null;
 
 const board = Chessboard('board', {
   draggable: true,
@@ -414,7 +416,7 @@ function judgeMove(move) {
     moveHistory = [move.san]; redoStack = [];
     document.getElementById('explore-controls').style.display = 'flex';
     const msg = best ? '✓ Correct! ' + p.solution_san : '✓ Acceptable! Best was ' + p.solution_san;
-    showFeedback(msg + (best && attempts === 0 && p.status !== 'bookmarked' ? ' (archived)' : ''),
+    showFeedback(msg + (best && attempts === 0 ? ' (archived)' : ''),
                  best ? 'correct' : 'info');
     chatMsg(msg, 'ok');
     recordSolve(p, info);
@@ -473,6 +475,7 @@ function chatMsg(text, cls) {
 function loadPuzzle() {
   const p = puzzles[idx];
   current = p;
+  solvedGap = null;
   game = new Chess(p.fen);
   const orient = p.turn === 'black' ? 'black' : 'white';
   board.orientation(orient);
@@ -567,12 +570,13 @@ async function postAttempt(puzzleId, info) {
   } catch (e) { /* stats only; never block play */ }
 }
 
-// Record a correct move: archive/score it, or just log it for bookmarked puzzles.
+// Record a correct move. Bookmarked ("Worth a 2nd Look") puzzles follow the same rule as
+// the rest: a first-try solve archives them, a retry solve moves them to the back of the queue.
+// (Catches are capped at one per puzzle server-side, so re-solving can't farm Pokémon.)
 function recordSolve(p, info) {
   const secs = Math.round(info.think_ms / 1000);
   const el = document.getElementById('feedback');
   el.textContent += `  ·  ${secs}s`;
-  if (p.status === 'bookmarked') { postAttempt(p.id, info); return; }
   const st = attempts === 0 ? 'solved_first_try' : 'solved_retry';
   setPuzzleStatus(p.id, st, info);
   markSolvedInQueue(p, st);
@@ -969,23 +973,25 @@ function showEggNotification(e) {
 
 // Keep the in-memory queue (and the counter total) in sync with a solve.
 // solved_first_try is archived out of the active pool, so remove it.
-// solved_retry stays but drops to the end of the queue (matches backend ordering).
+// The first solved_retry drops to the bottom of the queue (matches backend ordering); a second removes it.
 // The current board is left untouched so the user can keep exploring; the
 // counter reflects the new pool size and advancing with Next loads the next puzzle.
 function markSolvedInQueue(p, status) {
   const i = puzzles.indexOf(p);
   if (i === -1) return;
+  // A retry solve goes to the bottom of the queue once; solving that comeback ends it.
+  const comeback = status === 'solved_retry' && p.status !== 'solved_retry';
   p.status = status;
-  if (status === 'solved_first_try') {
+  if (status === 'solved_first_try' || status === 'solved_retry') {
     puzzles.splice(i, 1);
-    // idx now points at the puzzle that shifted into this slot (the next one),
-    // which is what Next/Prev and the counter should reference.
-    if (idx > i) idx--;
-    if (idx >= puzzles.length) idx = Math.max(0, puzzles.length - 1);
-  } else if (status === 'solved_retry') {
-    puzzles.splice(i, 1);
-    puzzles.push(p);
-    if (idx > i) idx--;
+    if (comeback) {
+      puzzles.push(p);
+      chatMsg('Solved after a miss: this one comes back once more at the bottom of the queue.', 'sys');
+    }
+    // The board stays on the solved puzzle, but the queue slot it left now holds the next one.
+    // Next loads that slot (not slot+1, which skipped a puzzle) and Prev loads the one before it.
+    if (idx === i) solvedGap = i;
+    else if (idx > i) idx--;
     if (idx >= puzzles.length) idx = Math.max(0, puzzles.length - 1);
   }
   // Refresh the counter without reloading the board (exploration continues).
@@ -994,8 +1000,16 @@ function markSolvedInQueue(p, status) {
   const input = document.getElementById('counter-input');
   input.max = total;
   input.value = total ? idx + 1 : 0;
-  document.getElementById('next-btn').disabled = idx >= total - 1;
-  document.getElementById('prev-btn').disabled = idx === 0;
+  document.getElementById('next-btn').disabled = !canGoNext();
+  document.getElementById('prev-btn').disabled = !canGoPrev();
+}
+
+function canGoNext() {
+  if (solvedGap !== null) return solvedGap < puzzles.length && puzzles[solvedGap] !== current;
+  return idx < puzzles.length - 1;
+}
+function canGoPrev() {
+  return solvedGap !== null ? solvedGap > 0 : idx > 0;
 }
 
 // Each badge family gets its own celebration:
@@ -1087,8 +1101,16 @@ async function archivePuzzle() {
   loadPuzzle();
 }
 
-document.getElementById('prev-btn').addEventListener('click', () => { if (idx > 0) { idx--; loadPuzzle(); } });
-document.getElementById('next-btn').addEventListener('click', () => { if (idx < puzzles.length - 1) { idx++; loadPuzzle(); } });
+document.getElementById('prev-btn').addEventListener('click', () => {
+  if (!canGoPrev()) return;
+  idx = solvedGap !== null ? solvedGap - 1 : idx - 1;
+  loadPuzzle();
+});
+document.getElementById('next-btn').addEventListener('click', () => {
+  if (!canGoNext()) return;
+  idx = solvedGap !== null ? solvedGap : idx + 1;
+  loadPuzzle();
+});
 
 document.getElementById('counter-input').addEventListener('change', function() {
   const val = parseInt(this.value);

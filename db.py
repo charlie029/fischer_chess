@@ -71,6 +71,9 @@ def init_db():
         conn.execute("ALTER TABLE puzzles ADD COLUMN status TEXT DEFAULT 'active'")
     if "solved_at" not in cols:
         conn.execute("ALTER TABLE puzzles ADD COLUMN solved_at TIMESTAMP")
+    # 1 once a solved_retry puzzle has had its one comeback; it then leaves the queue.
+    if "retry_done" not in cols:
+        conn.execute("ALTER TABLE puzzles ADD COLUMN retry_done INTEGER NOT NULL DEFAULT 0")
 
     # Badges table
     conn.execute("""CREATE TABLE IF NOT EXISTS badges (
@@ -320,15 +323,21 @@ def get_user_puzzles(user_id, limit=None):
 
 
 def get_queue_puzzles(user_id):
-    """Get puzzles for the main page queue: active first, then solved_retry, then bookmarked."""
+    """Get puzzles for the main page queue: active, then bookmarked, then solved_retry at the bottom.
+
+    A puzzle solved only after a wrong try comes back once; once that comeback is solved
+    (retry_done = 1) it leaves the queue. A first-try solve archives it as usual.
+    """
     conn = get_db()
     try:
         return conn.execute("""
             SELECT p.*, g.date as game_date, g.white as game_white, g.black as game_black,
                    g.event as game_event, g.result as game_result
             FROM puzzles p LEFT JOIN games g ON p.game_id = g.id
-            WHERE p.user_id = ? AND p.status IN ('active', 'solved_retry', 'bookmarked')
-            ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'solved_retry' THEN 1 WHEN 'bookmarked' THEN 2 END, p.created_at
+            WHERE p.user_id = ? AND (p.status IN ('active', 'bookmarked')
+                                     OR (p.status = 'solved_retry' AND p.retry_done = 0))
+            ORDER BY CASE p.status WHEN 'active' THEN 0 WHEN 'bookmarked' THEN 1 WHEN 'solved_retry' THEN 2 END,
+                     CASE WHEN p.status = 'solved_retry' THEN p.solved_at END, p.created_at
         """, (user_id,)).fetchall()
     finally:
         conn.close()
@@ -460,8 +469,11 @@ def update_puzzle_status(puzzle_id, status, attempt=None):
     conn = get_db()
     try:
         if status in ("solved_first_try", "solved_retry"):
-            conn.execute("UPDATE puzzles SET status = ?, solved_at = CURRENT_TIMESTAMP WHERE id = ?",
-                         (status, puzzle_id))
+            # A retry solve of a puzzle that was already solved_retry is its one comeback: done.
+            prev = conn.execute("SELECT status FROM puzzles WHERE id = ?", (puzzle_id,)).fetchone()
+            retry_done = int(status == "solved_retry" and prev is not None and prev[0] == "solved_retry")
+            conn.execute("UPDATE puzzles SET status = ?, solved_at = CURRENT_TIMESTAMP, retry_done = ? "
+                         "WHERE id = ?", (status, retry_done, puzzle_id))
         else:
             conn.execute("UPDATE puzzles SET status = ? WHERE id = ?", (status, puzzle_id))
         bonus = _insert_attempt(conn, puzzle_id, attempt) if attempt else dict(_NO_BONUS)
